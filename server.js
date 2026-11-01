@@ -1,765 +1,773 @@
-// THE HOUSE OF SERVICES — website + admin API
-// One Render web service serves the public site (/), the admin panel (/admin) and the API (/api).
+#!/usr/bin/env node
+'use strict';
+const http=require('http'),fs=require('fs'),path=require('path'),crypto=require('crypto'),tls=require('tls');
 
-const dns = require('dns');
-dns.setDefaultResultOrder('ipv4first'); // Render is IPv4-only; Supabase pooler resolves both
+// ── Config ────────────────────────────────────────────────────────────────────
+const PORT=3000;
+const DATA_FILE=path.join(__dirname,'data.enc');
+const PUB_DIR=path.join(__dirname,'public');
+const ENC_PASSWORD='Z@Yn00@17';
+const ENC_SALT='tradeled_salt_2024';
+const ZOHO_HOST='smtp.zoho.com';
+const ZOHO_PORT=465;
+const ZOHO_USER='shamikh@thehouseofservices.co.za';
+const ZOHO_PASS='Z@Yn00@17';
+const BACKUP_TO='shamikh@thehouseofservices.co.za';
 
-const path = require('path');
-const crypto = require('crypto');
-const express = require('express');
-const { Pool, types } = require('pg');
-types.setTypeParser(1082, (v) => v); // return DATE columns as 'YYYY-MM-DD' strings (no timezone shifts)
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+// ── Encryption ────────────────────────────────────────────────────────────────
+function deriveKey(){ return crypto.scryptSync(ENC_PASSWORD,ENC_SALT,32); }
+function encryptDB(obj){
+  const iv=crypto.randomBytes(16);
+  const cipher=crypto.createCipheriv('aes-256-cbc',deriveKey(),iv);
+  const json=JSON.stringify(obj);
+  const enc=Buffer.concat([cipher.update(json,'utf8'),cipher.final()]);
+  return Buffer.concat([iv,enc]);
+}
+function decryptDB(buf){
+  const iv=buf.slice(0,16),enc=buf.slice(16);
+  const decipher=crypto.createDecipheriv('aes-256-cbc',deriveKey(),iv);
+  const json=Buffer.concat([decipher.update(enc),decipher.final()]).toString('utf8');
+  return JSON.parse(json);
+}
 
-const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
-if (!process.env.JWT_SECRET) console.warn('[warn] JWT_SECRET not set: admin logins will reset on every restart.');
+// ── DB ────────────────────────────────────────────────────────────────────────
+const empty={
+  companies:[],parties:[],
+  stock:[{
+    id:1,name:'Au',unit:'g',quantity:0,opening_quantity:0,
+    avg_cost:0,selling_price:0,is_gold:true,description:'Gold (Au) — fine weight',
+    created_at:new Date().toISOString()
+  }],
+  transactions:[],cash_balance:0,suspense:[]
+};
+let db;
+function loadDB(){
+  if(fs.existsSync(DATA_FILE)){
+    const raw=fs.readFileSync(DATA_FILE);
+    // Try encrypted first
+    try{ db=decryptDB(raw); }
+    catch(e1){
+      // Try plain JSON fallback (in case old version saved unencrypted)
+      try{ db=JSON.parse(raw.toString('utf8')); console.log('Loaded plain JSON backup.'); }
+      catch(e2){
+        console.error('Cannot read data.enc — backing it up and starting fresh.');
+        fs.renameSync(DATA_FILE, DATA_FILE+'.corrupt.'+Date.now());
+        db=JSON.parse(JSON.stringify(empty));
+      }
+    }
+  } else {
+    db=JSON.parse(JSON.stringify(empty));
+  }
+  if(!db.cash_balance) db.cash_balance=0;
+  if(!db.suspense) db.suspense=[];
+  if(!db.investors) db.investors=[];
+  if(!db.stock) db.stock=[];
+  if(!db.stock.find(s=>s.name==='Au')){
+    db.stock.unshift({id:1,name:'Au',unit:'g',quantity:0,opening_quantity:0,avg_cost:0,selling_price:0,is_gold:true,created_at:new Date().toISOString()});
+  }
+  // ── One-time data fix: old cash_out records where party_id === pool_party_id ──
+  // Before the fix, saveCashTxn() set party_id = pool_party_id (wrong).
+  // These records should have party_id = null (the recipient wasn't recorded).
+  db.transactions.forEach(t=>{
+    if(t.type==='cash_out' && t.pool_party_id && parseInt(t.party_id)===parseInt(t.pool_party_id)){
+      t.party_id=null;
+    }
+  });
+  // ── One-time data fix: gold sells split across several pools ──────────────────
+  // The old server overwrote each row's quantity with the TOTAL fine weight.
+  // Recover each row's real grams from its own amount: total / (rate × (1−discount)).
+  (function repairSplitSells(){
+    // Group sells that were posted together: same date, same customer, same stock,
+    // same (combined) fine weight, and each row's quantity still equals that combined weight.
+    const bad=db.transactions.filter(t=>t.type==='sell'&&t.supplier_party_id&&t.fine_weight
+      &&Math.abs((t.quantity||0)-(t.fine_weight||0))<1e-6);
+    const groups={};
+    bad.forEach(t=>{
+      const k=[t.date,t.party_id,t.stock_item_id,(+t.fine_weight).toFixed(4)].join('|');
+      (groups[k]=groups[k]||[]).push(t);
+    });
+    let fixed=0;
+    Object.values(groups).forEach(g=>{
+      if(g.length<2) return;
+      const combined=g[0].fine_weight;
+      const groupTotal=g.reduce((a,t)=>a+(parseFloat(t.total_amount)||0),0);
+      if(groupTotal<=0) return;
+      // Each row's real grams = its share of the money × the combined weight
+      g.forEach(t=>{
+        const q=+((parseFloat(t.total_amount)||0)/groupTotal*combined).toFixed(4);
+        if(q>0&&q<combined-0.0005){ t.quantity=q; t.fine_weight=q; t.split_repaired=true; fixed++; }
+      });
+    });
+    console.log(fixed?`Repaired ${fixed} split gold sell record(s).`:'Split-sell check: nothing to repair.');
+  })();
+  rebuildBalances();
+  // Always re-save in current encrypted format on startup
+  saveDB();
+}
+// ── Rebuild all derived balances from scratch (startup + after edits) ─────────
+function rebuildBalances(){
+  db.parties.forEach(p=>{ p.balance=p.opening_balance||0; });
+  db.companies.forEach(c=>{ c.bank_balance=c.opening_balance||0; });
+  db.stock.forEach(s=>{ s.quantity=s.opening_quantity||0; s.avg_cost=0; });
+  db.cash_balance=0;
+  // Replay all transactions in chronological order
+  [...db.transactions]
+    .sort((a,b)=>a.date.localeCompare(b.date)||(parseInt(a.id)-parseInt(b.id)))
+    .forEach(t=>applyTransaction(t,db));
+}
+function saveDB(){ fs.writeFileSync(DATA_FILE,encryptDB(db)); }
+function nextId(arr){ return arr.length?Math.max(0,...arr.map(x=>parseInt(x.id)||0))+1:1; }
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
-  max: 5,
-  idleTimeoutMillis: 30000,
-});
-pool.on('error', (e) => console.error('[db] idle client error', e.message));
-const q = (text, params) => pool.query(text, params);
-
-// Keep the pooler connection warm
-setInterval(() => q('select 1').catch((e) => console.error('[db] ping failed', e.message)), 5 * 60 * 1000);
-
-const app = express();
-app.set('trust proxy', 1);
-app.use('/api/admin/leads', express.json({ limit: '4mb' })); // proof screenshots
-app.use(express.json({ limit: '200kb' }));
-app.use((req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  next();
-});
-
-// ---------- tiny rate limiter ----------
-function limiter(max, windowMs) {
-  const hits = new Map();
-  return (req, res, next) => {
-    const key = req.ip;
-    const now = Date.now();
-    const rec = hits.get(key) || { n: 0, t: now };
-    if (now - rec.t > windowMs) { rec.n = 0; rec.t = now; }
-    rec.n++;
-    hits.set(key, rec);
-    if (hits.size > 5000) hits.clear();
-    if (rec.n > max) return res.status(429).json({ error: 'Too many requests. Try again in a few minutes.' });
-    next();
+// ── Transaction helpers ───────────────────────────────────────────────────────
+function enrichTxn(t,d){
+  const p=d.parties.find(x=>x.id===t.party_id);
+  const s=d.stock.find(x=>x.id===t.stock_item_id);
+  const c=d.companies.find(x=>x.id===t.company_id);
+  const sp=d.parties.find(x=>x.id===t.supplier_party_id);
+  const inv=t.investor_id&&d.investors?d.investors.find(x=>parseInt(x.id)===parseInt(t.investor_id)):null;
+  const tc=t.to_company_id?d.companies.find(x=>parseInt(x.id)===parseInt(t.to_company_id)):null;
+  const sb=t.source_buy_id?d.transactions.find(x=>parseInt(x.id)===parseInt(t.source_buy_id)):null;
+  return{
+    ...t,
+    party_name:p?p.name:null,
+    stock_name:s?s.name:null,
+    stock_unit:s?s.unit:null,
+    company_name:c?c.name:null,
+    to_company_name:tc?tc.name:null,
+    investor_name:inv?inv.name:null,
+    supplier_party_name:sp?sp.name:null,
+    source_buy_date:sb?sb.date:null,
+    source_buy_ref:sb?(sb.reference||null):null
   };
 }
 
-const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => {
-  console.error('[api]', req.method, req.path, e.message);
-  const msg = e.msgOverride ? e.msgOverride
-            : e.status === 404 ? 'That record no longer exists.'
-            : e.code === '23503' ? 'This record is linked to something that no longer exists, or is still used elsewhere.'
-            : e.code === '23514' ? 'One of the values is not allowed. Check amounts are above zero and options are valid.'
-            : e.code === '23505' ? 'That value already exists. Use a different one.'
-            : e.code === '22P02' || e.code === '22007' || e.code === '22008' ? 'One of the fields has the wrong format. Check dates and amounts.'
-            : 'Something went wrong on the server.';
-  // in the admin panel, show the real reason so problems can be fixed quickly
-  const detail = !e.msgOverride && !e.status && req.path.startsWith('/api/admin') ? ` (${e.message})` : '';
-  res.status(e.status || 500).json({ error: msg + detail });
+function applyTransaction(t,d){
+  const{type,party_id,stock_item_id,quantity,unit_price,company_id}=t;
+  const total_amount=Math.abs(parseFloat(t.total_amount)||0); // always positive
+  // Party balance: positive = they owe us (receivable)
+  if(party_id){
+    const i=d.parties.findIndex(x=>parseInt(x.id)===parseInt(party_id));
+    if(i>=0){
+      // sell/income/cash_out/pay_supplier → Dr → balance up (they owe us more / we owe them less)
+      if(type==='sell'||type==='income'||type==='cash_out'||type==='pay_supplier') d.parties[i].balance=(d.parties[i].balance||0)+total_amount;
+      // buy/receive_payment/cash_in → Cr → balance down (they owe us less / we owe them more)
+      else if(type==='buy'||type==='receive_payment'||type==='cash_in') d.parties[i].balance=(d.parties[i].balance||0)-total_amount;
+    }
+  }
+  // Investors: paid = money out, received = money in — from/to a company bank or cash
+  if(type==='investor_payment'||type==='investor_receipt'){
+    const sign=type==='investor_receipt'?1:-1;
+    if(t.source==='cash') d.cash_balance=(d.cash_balance||0)+sign*total_amount;
+    else{
+      const i=d.companies.findIndex(x=>parseInt(x.id)===parseInt(company_id));
+      if(i>=0) d.companies[i].bank_balance=(d.companies[i].bank_balance||0)+sign*total_amount;
+    }
+    return;
+  }
+  // Transfer between companies: out of company_id, into to_company_id
+  if(type==='transfer'){
+    const f=d.companies.findIndex(x=>parseInt(x.id)===parseInt(company_id));
+    const to=d.companies.findIndex(x=>parseInt(x.id)===parseInt(t.to_company_id));
+    if(f>=0) d.companies[f].bank_balance=(d.companies[f].bank_balance||0)-total_amount;
+    if(to>=0) d.companies[to].bank_balance=(d.companies[to].bank_balance||0)+total_amount;
+    return;
+  }
+  // Company bank balance
+  if(company_id){
+    const i=d.companies.findIndex(x=>parseInt(x.id)===parseInt(company_id));
+    if(i>=0){
+      if(['receive_payment','income','sell','cash_in'].includes(type)) d.companies[i].bank_balance=(d.companies[i].bank_balance||0)+total_amount;
+      else d.companies[i].bank_balance=(d.companies[i].bank_balance||0)-total_amount;
+    }
+  }
+  // Stock quantity
+  if(stock_item_id&&(type==='buy'||type==='sell')){
+    const i=d.stock.findIndex(x=>parseInt(x.id)===parseInt(stock_item_id));
+    if(i>=0){
+      const si=d.stock[i];
+      if(type==='buy'){
+        const prev_qty=si.quantity||0;
+        const prev_cost=si.avg_cost||0;
+        const new_qty=prev_qty+(quantity||0);
+        if(new_qty>0) si.avg_cost=(prev_qty*prev_cost+(quantity||0)*(unit_price||0))/new_qty;
+        si.quantity=new_qty;
+      } else {
+        si.quantity=Math.max(0,(si.quantity||0)-(quantity||0));
+      }
+    }
+  }
+  // Cash balance
+  // Cash handling fees don't move physical cash — party ledger + Cash Fee Profit only
+  if(t.expense_category==='Cash Fee') return;
+  if(type==='cash_in') d.cash_balance=(d.cash_balance||0)+total_amount;
+  else if(type==='cash_out') d.cash_balance=(d.cash_balance||0)-total_amount;
+}
+
+function reverseTransaction(t,d){
+  const{type,party_id,stock_item_id,quantity,company_id}=t;
+  const total_amount=Math.abs(parseFloat(t.total_amount)||0); // always positive
+  if(type==='investor_payment'||type==='investor_receipt'){
+    const sign=type==='investor_receipt'?1:-1;
+    if(t.source==='cash') d.cash_balance=(d.cash_balance||0)-sign*total_amount;
+    else{
+      const i=d.companies.findIndex(x=>parseInt(x.id)===parseInt(company_id));
+      if(i>=0) d.companies[i].bank_balance=(d.companies[i].bank_balance||0)-sign*total_amount;
+    }
+    return;
+  }
+  if(type==='transfer'){
+    const f=d.companies.findIndex(x=>parseInt(x.id)===parseInt(company_id));
+    const to=d.companies.findIndex(x=>parseInt(x.id)===parseInt(t.to_company_id));
+    if(f>=0) d.companies[f].bank_balance=(d.companies[f].bank_balance||0)+total_amount;
+    if(to>=0) d.companies[to].bank_balance=(d.companies[to].bank_balance||0)-total_amount;
+    return;
+  }
+  if(party_id){
+    const i=d.parties.findIndex(x=>parseInt(x.id)===parseInt(party_id));
+    if(i>=0){
+      if(type==='sell'||type==='income'||type==='cash_out'||type==='pay_supplier') d.parties[i].balance=(d.parties[i].balance||0)-total_amount;
+      else if(type==='buy'||type==='receive_payment'||type==='cash_in') d.parties[i].balance=(d.parties[i].balance||0)+total_amount;
+    }
+  }
+  if(company_id){
+    const i=d.companies.findIndex(x=>parseInt(x.id)===parseInt(company_id));
+    if(i>=0){
+      if(['receive_payment','income','sell','cash_in'].includes(type)) d.companies[i].bank_balance=(d.companies[i].bank_balance||0)-total_amount;
+      else d.companies[i].bank_balance=(d.companies[i].bank_balance||0)+total_amount;
+    }
+  }
+  if(stock_item_id&&(type==='buy'||type==='sell')){
+    const i=d.stock.findIndex(x=>parseInt(x.id)===parseInt(stock_item_id));
+    if(i>=0){
+      if(type==='buy') d.stock[i].quantity=Math.max(0,(d.stock[i].quantity||0)-(quantity||0));
+      else d.stock[i].quantity=(d.stock[i].quantity||0)+(quantity||0);
+    }
+  }
+  if(t.expense_category==='Cash Fee') return;
+  if(type==='cash_in') d.cash_balance=(d.cash_balance||0)-total_amount;
+  else if(type==='cash_out') d.cash_balance=(d.cash_balance||0)+total_amount;
+}
+
+// ── HTTP helpers ──────────────────────────────────────────────────────────────
+function mime(fp){
+  const ext=path.extname(fp).toLowerCase();
+  const m={'.html':'text/html','.css':'text/css','.js':'application/javascript','.json':'application/json','.png':'image/png','.ico':'image/x-icon'};
+  return m[ext]||'application/octet-stream';
+}
+function json(res,data,status=200){
+  const body=JSON.stringify(data);
+  res.writeHead(status,{'Content-Type':'application/json','Content-Length':Buffer.byteLength(body),'Access-Control-Allow-Origin':'*'});
+  res.end(body);
+}
+function err(res,msg,status=400){ json(res,{error:msg},status); }
+function readBody(req){
+  return new Promise((resolve,reject)=>{
+    let buf='';
+    req.on('data',c=>buf+=c);
+    req.on('end',()=>{try{resolve(buf?JSON.parse(buf):{});}catch(e){resolve({});}});
+    req.on('error',reject);
+  });
+}
+
+// ── SMTP TLS (Zoho) ───────────────────────────────────────────────────────────
+function sendEmail(to,subject,body){
+  return new Promise((resolve,reject)=>{
+    const sock=tls.connect({host:ZOHO_HOST,port:ZOHO_PORT,rejectUnauthorized:true},()=>{
+      const b64cred=Buffer.from(`\0${ZOHO_USER}\0${ZOHO_PASS}`).toString('base64');
+      let step=0;
+      const cmds=[
+        ()=>`EHLO tradeled\r\n`,
+        ()=>`AUTH PLAIN ${b64cred}\r\n`,
+        ()=>`MAIL FROM:<${ZOHO_USER}>\r\n`,
+        ()=>`RCPT TO:<${to}>\r\n`,
+        ()=>`DATA\r\n`,
+        ()=>`From: TradeLedger <${ZOHO_USER}>\r\nTo: ${to}\r\nSubject: ${subject}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain;charset=UTF-8\r\n\r\n${body}\r\n.\r\n`,
+        ()=>`QUIT\r\n`
+      ];
+      function next(){ if(step<cmds.length) sock.write(cmds[step++]()); }
+      sock.on('data',d=>{
+        const s=d.toString();
+        if(/^220 /.test(s)||/^250/.test(s)||/^235/.test(s)||/^354/.test(s)) next();
+        else if(/^221/.test(s)){ sock.destroy(); resolve('sent'); }
+        else if(/^[45]/.test(s)){ sock.destroy(); reject(new Error('SMTP: '+s.trim())); }
+      });
+      sock.on('error',reject);
+    });
+    sock.on('error',reject);
+  });
+}
+
+// ── Router ────────────────────────────────────────────────────────────────────
+async function handleRequest(req,res){
+  const url=new URL(req.url,`http://localhost:${PORT}`);
+  const p=url.pathname;
+  const method=req.method.toUpperCase();
+
+  if(method==='OPTIONS'){
+    res.writeHead(204,{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE','Access-Control-Allow-Headers':'Content-Type'});
+    res.end(); return;
+  }
+
+  // Static files
+  if(method==='GET'&&!p.startsWith('/api/')){
+    let fp=path.join(PUB_DIR,p==='/'?'app.html':p);
+    if(!fp.startsWith(PUB_DIR)){err(res,'Forbidden',403);return;}
+    if(!fs.existsSync(fp)){err(res,'Not found',404);return;}
+    const buf=fs.readFileSync(fp);
+    res.writeHead(200,{'Content-Type':mime(fp),'Content-Length':buf.length});
+    res.end(buf); return;
+  }
+
+  // ── Companies ──────────────────────────────────────────────────────────────
+  if(p==='/api/companies'){
+    if(method==='GET'){ json(res,db.companies); return; }
+    if(method==='POST'){
+      const body=await readBody(req);
+      if(!body.name){err(res,'name required');return;}
+      const ob=parseFloat(body.opening_balance)||0;
+      const c={id:nextId(db.companies),name:body.name,bank_name:body.bank_name||'',opening_balance:ob,bank_balance:ob,created_at:new Date().toISOString()};
+      db.companies.push(c); saveDB(); json(res,c,201); return;
+    }
+  }
+  const cm=p.match(/^\/api\/companies\/(\d+)$/);
+  if(cm){
+    const id=parseInt(cm[1]),i=db.companies.findIndex(x=>parseInt(x.id)===id);
+    if(method==='PUT'){
+      if(i<0){err(res,'Not found',404);return;}
+      const body=await readBody(req);
+      const oldOB=db.companies[i].opening_balance||0;
+      const newOB=body.opening_balance!==undefined?parseFloat(body.opening_balance):oldOB;
+      const diff=newOB-oldOB;
+      db.companies[i]={...db.companies[i],...body,id,opening_balance:newOB,bank_balance:(db.companies[i].bank_balance||0)+diff};
+      saveDB(); json(res,db.companies[i]); return;
+    }
+    if(method==='DELETE'){
+      if(i<0){err(res,'Not found',404);return;}
+      db.companies.splice(i,1); saveDB(); json(res,{ok:true}); return;
+    }
+  }
+
+  // ── Investors ──────────────────────────────────────────────────────────────
+  if(p==='/api/investors'){
+    if(method==='GET'){ json(res,db.investors||[]); return; }
+    if(method==='POST'){
+      const body=await readBody(req);
+      if(!body.name){err(res,'name required');return;}
+      const inv={id:nextId(db.investors),name:body.name,phone:body.phone||'',email:body.email||'',notes:body.notes||'',
+        opening_balance:parseFloat(body.opening_balance)||0,created_at:new Date().toISOString()};
+      db.investors.push(inv); saveDB(); json(res,inv,201); return;
+    }
+  }
+  const ivm=p.match(/^\/api\/investors\/(\d+)$/);
+  if(ivm){
+    const id=parseInt(ivm[1]),i=db.investors.findIndex(x=>parseInt(x.id)===id);
+    if(i<0){err(res,'Not found',404);return;}
+    if(method==='PUT'){
+      const body=await readBody(req);
+      const inv=db.investors[i];
+      ['name','phone','email','notes'].forEach(k=>{ if(body[k]!==undefined) inv[k]=body[k]; });
+      if(body.opening_balance!==undefined) inv.opening_balance=parseFloat(body.opening_balance)||0;
+      saveDB(); json(res,inv); return;
+    }
+    if(method==='DELETE'){
+      if(db.transactions.some(t=>parseInt(t.investor_id)===id)){err(res,'This investor has ledger entries. Delete those first.');return;}
+      db.investors.splice(i,1); saveDB(); json(res,{ok:true}); return;
+    }
+  }
+  const ilm=p.match(/^\/api\/ledger\/investor\/(\d+)$/);
+  if(ilm&&method==='GET'){
+    const id=parseInt(ilm[1]);
+    const investor=db.investors.find(x=>parseInt(x.id)===id);
+    if(!investor){err(res,'Not found',404);return;}
+    const txns=db.transactions.filter(t=>parseInt(t.investor_id)===id)
+      .sort((a,b)=>a.date.localeCompare(b.date)||parseInt(a.id)-parseInt(b.id)).map(t=>enrichTxn(t,db));
+    json(res,{investor,transactions:txns}); return;
+  }
+
+  // ── Parties ────────────────────────────────────────────────────────────────
+  if(p==='/api/parties'){
+    if(method==='GET'){ json(res,db.parties); return; }
+    if(method==='POST'){
+      const body=await readBody(req);
+      if(!body.name){err(res,'name required');return;}
+      const ob=parseFloat(body.opening_balance)||0;
+      const party={id:nextId(db.parties),name:body.name,type:body.type||'supplier',phone:body.phone||'',email:body.email||'',notes:body.notes||'',opening_balance:ob,balance:ob,created_at:new Date().toISOString()};
+      db.parties.push(party); saveDB(); json(res,party,201); return;
+    }
+  }
+  const pm=p.match(/^\/api\/parties\/(\d+)$/);
+  if(pm){
+    const id=parseInt(pm[1]),i=db.parties.findIndex(x=>parseInt(x.id)===id);
+    if(method==='PUT'){
+      if(i<0){err(res,'Not found',404);return;}
+      const body=await readBody(req);
+      const oldOB=db.parties[i].opening_balance||0;
+      const newOB=body.opening_balance!==undefined?parseFloat(body.opening_balance):oldOB;
+      const diff=newOB-oldOB;
+      db.parties[i]={...db.parties[i],...body,id,opening_balance:newOB,balance:(db.parties[i].balance||0)+diff};
+      saveDB(); json(res,db.parties[i]); return;
+    }
+    if(method==='DELETE'){
+      if(i<0){err(res,'Not found',404);return;}
+      db.parties.splice(i,1); saveDB(); json(res,{ok:true}); return;
+    }
+  }
+
+  // ── Stock ──────────────────────────────────────────────────────────────────
+  if(p==='/api/stock'){
+    if(method==='GET'){ json(res,db.stock); return; }
+    if(method==='POST'){
+      const body=await readBody(req);
+      if(!body.name){err(res,'name required');return;}
+      const oq=parseFloat(body.opening_quantity)||0;
+      const s={id:nextId(db.stock),name:body.name,unit:body.unit||'units',description:body.description||'',selling_price:parseFloat(body.selling_price)||0,avg_cost:0,quantity:oq,opening_quantity:oq,is_gold:!!body.is_gold,created_at:new Date().toISOString()};
+      db.stock.push(s); saveDB(); json(res,s,201); return;
+    }
+  }
+  const sm=p.match(/^\/api\/stock\/(\d+)$/);
+  if(sm){
+    const id=parseInt(sm[1]),i=db.stock.findIndex(x=>parseInt(x.id)===id);
+    if(method==='PUT'){
+      if(i<0){err(res,'Not found',404);return;}
+      const body=await readBody(req);
+      const oldOQ=db.stock[i].opening_quantity||0;
+      const newOQ=body.opening_quantity!==undefined?parseFloat(body.opening_quantity):oldOQ;
+      const diff=newOQ-oldOQ;
+      db.stock[i]={...db.stock[i],...body,id,opening_quantity:newOQ,quantity:(db.stock[i].quantity||0)+diff};
+      saveDB(); json(res,db.stock[i]); return;
+    }
+    if(method==='DELETE'){
+      if(i<0){err(res,'Not found',404);return;}
+      db.stock.splice(i,1); saveDB(); json(res,{ok:true}); return;
+    }
+  }
+
+  // ── Transactions ───────────────────────────────────────────────────────────
+  if(p==='/api/transactions'){
+    if(method==='GET'){ json(res,db.transactions.map(t=>enrichTxn(t,db))); return; }
+    if(method==='POST'){
+      const body=await readBody(req);
+      if(!body.type){err(res,'type required');return;}
+      if(body.type==='investor_payment'||body.type==='investor_receipt'){
+        if(!body.investor_id){err(res,'investor_id required');return;}
+        if(body.source!=='cash'&&!body.company_id){err(res,'Choose a company or cash');return;}
+        if(body.source==='cash') body.company_id=null;
+        body.party_id=null; body.stock_item_id=null; body.payment_status='paid';
+      }
+      if(body.type==='transfer'){
+        if(!body.company_id||!body.to_company_id){err(res,'Transfer needs a from and a to company');return;}
+        if(parseInt(body.company_id)===parseInt(body.to_company_id)){err(res,'From and To company must be different');return;}
+        body.party_id=null; body.stock_item_id=null; body.payment_status='paid';
+      }
+      const total=parseFloat(body.total_amount)||0;
+      // For Au (gold) transactions: fine_weight IS the quantity
+      let qty=parseFloat(body.quantity)||null;
+      if(body.type==='buy'&&body.fine_weight){
+        qty=parseFloat(body.fine_weight)||qty;
+      }
+      // Sells: the per-lot quantity sent by the client wins. (Previously the TOTAL
+      // fine weight overwrote it, so a sell split across 2+ pools deducted the
+      // full weight from every pool and drove them negative.)
+      if(body.type==='sell'&&!qty&&body.fine_weight) qty=parseFloat(body.fine_weight)||null;
+      if(body.type==='sell'&&body.fine_weight&&qty) body.fine_weight=qty;
+      const t={
+        id:nextId(db.transactions),
+        type:body.type,
+        date:body.date||new Date().toISOString().slice(0,10),
+        reference:body.reference||('TXN-'+nextId(db.transactions)),
+        description:body.description||'',
+        company_id:body.company_id?parseInt(body.company_id):null,
+        to_company_id:body.to_company_id?parseInt(body.to_company_id):null,
+        investor_id:body.investor_id?parseInt(body.investor_id):null,
+        pool_party_id:body.pool_party_id?parseInt(body.pool_party_id):null,
+        source:body.source==='cash'?'cash':(body.investor_id?'company':null),
+        party_id:body.party_id?parseInt(body.party_id):null,
+        stock_item_id:body.stock_item_id?parseInt(body.stock_item_id):null,
+        // supplier_party_id = which supplier's stock is being sold (sell transactions)
+        supplier_party_id:body.supplier_party_id?parseInt(body.supplier_party_id):null,
+        // source_buy_id = the exact purchase (lot) this sell draws from
+        source_buy_id:body.source_buy_id?parseInt(body.source_buy_id):null,
+        charged_at_cost:!!body.charged_at_cost,
+        // non-Au sells drawn from several lots in one ledger line
+        pool_allocations:Array.isArray(body.pool_allocations)?body.pool_allocations.map(a=>({
+          buy_id:parseInt(a.buy_id)||null,supplier_party_id:parseInt(a.supplier_party_id)||null,quantity:parseFloat(a.quantity)||0,at_cost:!!a.at_cost,amount:parseFloat(a.amount)||null
+        })).filter(a=>a.buy_id&&a.quantity>0):null,
+        quantity:qty,
+        unit_price:parseFloat(body.unit_price)||null,
+        total_amount:total,
+        payment_status:body.payment_status||'unpaid',
+        amount_paid:0,
+        gross_weight:body.gross_weight?parseFloat(body.gross_weight):null,
+        fine_weight:body.fine_weight?parseFloat(body.fine_weight):null,
+        purity:body.purity?parseFloat(body.purity):null,
+        discount:body.discount?parseFloat(body.discount):null,
+        expense_category:body.expense_category||null,
+        expense_sub:body.expense_sub||null,
+        created_at:new Date().toISOString()
+      };
+      if(t.payment_status==='paid') t.amount_paid=total;
+      db.transactions.push(t);
+      applyTransaction(t,db);
+      saveDB();
+      json(res,enrichTxn(t,db),201); return;
+    }
+  }
+  const txm=p.match(/^\/api\/transactions\/(\d+)$/);
+  if(txm){
+    const id=parseInt(txm[1]),i=db.transactions.findIndex(x=>parseInt(x.id)===id);
+    if(method==='PUT'){
+      if(i<0){err(res,'Not found',404);return;}
+      const body=await readBody(req);
+      if(body.record_payment){
+        const t=db.transactions[i];
+        const amt=parseFloat(body.payment_amount)||0;
+        if(amt<=0){err(res,'payment_amount required');return;}
+        const paid_so_far=(t.amount_paid||0)+amt;
+        const new_status=paid_so_far>=(t.total_amount||0)?'paid':'partial';
+        db.transactions[i].amount_paid=paid_so_far;
+        db.transactions[i].payment_status=new_status;
+        const payType=t.type==='sell'?'receive_payment':'pay_supplier';
+        const payTxn={
+          id:nextId(db.transactions),type:payType,
+          date:body.date||new Date().toISOString().slice(0,10),
+          reference:(t.reference||'TXN')+'-PMT',
+          description:`Payment for: ${t.description||t.reference||''}`,
+          company_id:body.company_id?parseInt(body.company_id):null,
+          party_id:t.party_id,stock_item_id:null,
+          quantity:null,unit_price:null,total_amount:amt,
+          payment_status:'paid',amount_paid:amt,
+          created_at:new Date().toISOString()
+        };
+        db.transactions.push(payTxn);
+        applyTransaction(payTxn,db);
+        saveDB();
+        json(res,{ok:true,status:new_status}); return;
+      }
+      if(body.edit_fee){
+        const t=db.transactions[i];
+        if(t.expense_category!=='Cash Fee'){err(res,'Only cash fee transactions can be edited here');return;}
+        if(body.date) t.date=body.date;
+        if(body.party_id!==undefined) t.party_id=body.party_id?parseInt(body.party_id):null;
+        if(body.total_amount!==undefined){
+          const a=parseFloat(body.total_amount)||0;
+          if(a<=0){err(res,'Amount must be greater than zero');return;}
+          t.total_amount=a; t.amount_paid=a;
+        }
+        if(body.fee_type==='cash_in'||body.fee_type==='cash_out') t.type=body.fee_type;
+        if(body.description!==undefined) t.description=body.description;
+        rebuildBalances(); saveDB(); json(res,enrichTxn(t,db)); return;
+      }
+      err(res,'Use record_payment:true for PUT'); return;
+    }
+    if(method==='DELETE'){
+      if(i<0){err(res,'Not found',404);return;}
+      reverseTransaction(db.transactions[i],db);
+      db.transactions.splice(i,1);
+      saveDB(); json(res,{ok:true}); return;
+    }
+  }
+
+  // ── Split a cash fee across several parties ────────────────────────────────
+  const fsm=p.match(/^\/api\/transactions\/(\d+)\/split$/);
+  if(fsm&&method==='POST'){
+    const id=parseInt(fsm[1]),i=db.transactions.findIndex(x=>parseInt(x.id)===id);
+    if(i<0){err(res,'Not found',404);return;}
+    const t=db.transactions[i];
+    if(t.expense_category!=='Cash Fee'){err(res,'Only cash fee transactions can be allocated');return;}
+    const body=await readBody(req);
+    const parts=(Array.isArray(body.parts)?body.parts:[]).map(x=>({
+      party_id:x.party_id?parseInt(x.party_id):null,
+      fee_type:(x.fee_type==='cash_in'||x.fee_type==='cash_out')?x.fee_type:t.type,
+      amount:+(parseFloat(x.amount)||0).toFixed(2)})).filter(x=>x.amount>0);
+    const same=parts.filter(x=>x.fee_type===t.type);
+    if(!same.length){err(res,'Keep at least one row of the original fee type');return;}
+    const sum=same.reduce((a,x)=>a+x.amount,0);
+    if(Math.abs(sum-(t.total_amount||0))>0.01){err(res,`Rows of the original type add up to R${sum.toFixed(2)}, must equal the fee R${(t.total_amount||0).toFixed(2)}`);return;}
+    // first same-type row stays on the original record; everything else becomes new fee records
+    const first=same[0];
+    t.party_id=first.party_id; t.total_amount=first.amount; t.amount_paid=first.amount;
+    const created=[];
+    parts.filter(x=>x!==first).forEach(x=>{
+      const n={...t,id:nextId(db.transactions),type:x.fee_type,party_id:x.party_id,total_amount:x.amount,amount_paid:x.amount,
+        split_from:t.id,created_at:new Date().toISOString()};
+      db.transactions.push(n); created.push(n.id);
+    });
+    rebuildBalances(); saveDB(); json(res,{ok:true,updated:t.id,created}); return;
+  }
+
+  // ── Cash ───────────────────────────────────────────────────────────────────
+  if(p==='/api/cash'&&method==='GET'){
+    const cashTxns=db.transactions
+      .filter(t=>((t.type==='cash_in'||t.type==='cash_out')&&t.expense_category!=='Cash Fee')
+        ||((t.type==='investor_payment'||t.type==='investor_receipt')&&t.source==='cash'))
+      .sort((a,b)=>a.date.localeCompare(b.date)||a.id-b.id)
+      .map(t=>enrichTxn(t,db));
+    json(res,{balance:db.cash_balance||0,transactions:cashTxns}); return;
+  }
+
+  // ── Ledger: party ──────────────────────────────────────────────────────────
+  const lpm=p.match(/^\/api\/ledger\/party\/(\d+)$/);
+  if(lpm&&method==='GET'){
+    const id=parseInt(lpm[1]);
+    const party=db.parties.find(x=>x.id===id);
+    if(!party){err(res,'Not found',404);return;}
+    // Include all transactions where this party is the primary party (not just pool source)
+    const txns=db.transactions
+      .filter(t=>parseInt(t.party_id)===id)
+      .sort((a,b)=>a.date.localeCompare(b.date)||parseInt(a.id)-parseInt(b.id))
+      .map(t=>enrichTxn(t,db));
+    json(res,{party,transactions:txns}); return;
+  }
+
+  // ── Ledger: stock ──────────────────────────────────────────────────────────
+  const lsm=p.match(/^\/api\/ledger\/stock\/(\d+)$/);
+  if(lsm&&method==='GET'){
+    const id=parseInt(lsm[1]);
+    const item=db.stock.find(x=>x.id===id);
+    if(!item){err(res,'Not found',404);return;}
+    const txns=db.transactions
+      .filter(t=>t.stock_item_id===id&&(t.type==='buy'||t.type==='sell'))
+      .sort((a,b)=>a.date.localeCompare(b.date)||a.id-b.id)
+      .map(t=>enrichTxn(t,db));
+    json(res,{item,transactions:txns}); return;
+  }
+
+  // ── Ledger: company ────────────────────────────────────────────────────────
+  const lcm=p.match(/^\/api\/ledger\/company\/(\d+)$/);
+  if(lcm&&method==='GET'){
+    const id=parseInt(lcm[1]);
+    const company=db.companies.find(x=>x.id===id);
+    if(!company){err(res,'Not found',404);return;}
+    const txns=db.transactions
+      .filter(t=>parseInt(t.company_id)===id||parseInt(t.to_company_id)===id)
+      .sort((a,b)=>a.date.localeCompare(b.date)||a.id-b.id)
+      .map(t=>enrichTxn(t,db));
+    json(res,{company,transactions:txns}); return;
+  }
+
+  // ── Suspense ───────────────────────────────────────────────────────────────
+  if(p==='/api/suspense'){
+    if(method==='GET'){
+      const nm=(arr,id)=>{ const x=id?arr.find(o=>parseInt(o.id)===parseInt(id)):null; return x?x.name:null; };
+      json(res,(db.suspense||[]).map(s=>({
+        ...s,
+        company_name:nm(db.companies,s.company_id||s.allocated_to_company),
+        allocated_company_name:nm(db.companies,s.allocated_to_company),
+        allocated_party_name:nm(db.parties,s.allocated_to_party)
+      }))); return;
+    }
+    if(method==='POST'){
+      const body=await readBody(req);
+      if(!body.total_amount||!body.date){err(res,'date and total_amount required');return;}
+      const s={
+        id:nextId(db.suspense||[]),
+        date:body.date,
+        total_amount:Math.abs(parseFloat(body.total_amount)),
+        direction:body.direction||'in', // 'in' = money received, 'out' = money paid
+        description:body.description||'',
+        reference:body.reference||'',
+        company_id:body.company_id?parseInt(body.company_id):null,
+        allocated:false,
+        created_at:new Date().toISOString()
+      };
+      if(!db.suspense) db.suspense=[];
+      db.suspense.push(s); saveDB(); json(res,s,201); return;
+    }
+  }
+  const spm=p.match(/^\/api\/suspense\/(\d+)$/);
+  if(spm){
+    const id=parseInt(spm[1]);
+    if(!db.suspense) db.suspense=[];
+    const i=db.suspense.findIndex(x=>parseInt(x.id)===id);
+    if(method==='PUT'){
+      if(i<0){err(res,'Not found',404);return;}
+      const body=await readBody(req);
+      const s=db.suspense[i];
+      if(body.company_id!==undefined){
+        const cid=body.company_id?parseInt(body.company_id):null;
+        s.company_id=cid;
+        if(s.allocated){
+          s.allocated_to_company=cid;
+          const t=db.transactions.find(x=>parseInt(x.id)===parseInt(s.allocated_txn_id));
+          if(t) t.company_id=cid;
+        }
+      }
+      if(body.reference!==undefined) s.reference=body.reference;
+      if(body.description!==undefined) s.description=body.description;
+      rebuildBalances(); saveDB(); json(res,s); return;
+    }
+    if(method==='DELETE'){
+      if(i<0){err(res,'Not found',404);return;}
+      db.suspense.splice(i,1); saveDB(); json(res,{ok:true}); return;
+    }
+  }
+  const sapm=p.match(/^\/api\/suspense\/(\d+)\/allocate$/);
+  if(sapm&&method==='POST'){
+    const id=parseInt(sapm[1]);
+    if(!db.suspense) db.suspense=[];
+    const i=db.suspense.findIndex(x=>parseInt(x.id)===id);
+    if(i<0){err(res,'Not found',404);return;}
+    const body=await readBody(req);
+    const s=db.suspense[i];
+    const party_id=body.party_id?parseInt(body.party_id):null;
+    const company_id=body.company_id?parseInt(body.company_id):(s.company_id?parseInt(s.company_id):null);
+    if(!company_id){err(res,'This suspense entry has no bank set. Set the bank first.');return;}
+    // direction 'in' = we received money → receive_payment; 'out' = we paid → pay_supplier
+    const txType=s.direction==='in'?'receive_payment':'pay_supplier';
+    const t={
+      id:nextId(db.transactions),
+      type:txType,
+      date:body.date||s.date,
+      reference:s.reference||('SUSP-'+s.id),
+      description:(body.notes||s.description||'')+(body.notes&&s.description?' — ':'')+(s.description&&body.notes?'':s.description||''),
+      company_id,party_id,
+      stock_item_id:null,quantity:null,unit_price:null,
+      total_amount:s.total_amount,
+      payment_status:'paid',amount_paid:s.total_amount,
+      created_at:new Date().toISOString()
+    };
+    db.transactions.push(t);
+    applyTransaction(t,db);
+    // Mark suspense as allocated (keep for audit) and save
+    db.suspense[i].allocated=true;
+    db.suspense[i].allocated_to_party=party_id;
+    db.suspense[i].allocated_to_company=company_id;
+    if(!db.suspense[i].company_id) db.suspense[i].company_id=company_id;
+    db.suspense[i].allocated_txn_id=t.id;
+    db.suspense[i].allocated_at=new Date().toISOString();
+    saveDB();
+    json(res,{ok:true,transaction:enrichTxn(t,db)}); return;
+  }
+
+  // ── Backup ─────────────────────────────────────────────────────────────────
+  if(p==='/api/backup/email'&&method==='POST'){
+    try{
+      const snap=JSON.stringify(db,null,2);
+      const dt=new Date().toISOString().slice(0,10);
+      await sendEmail(BACKUP_TO,`TradeLedger Backup ${dt}`,`TradeLedger data backup — ${dt}\n\n${snap}`);
+      json(res,{ok:true}); return;
+    }catch(e){ json(res,{ok:false,error:e.message}); return; }
+  }
+  if(p==='/api/backup/download'&&method==='GET'){
+    if(!fs.existsSync(DATA_FILE)){err(res,'No data file yet');return;}
+    const buf=fs.readFileSync(DATA_FILE);
+    const dt=new Date().toISOString().slice(0,10);
+    res.writeHead(200,{'Content-Type':'application/octet-stream','Content-Disposition':`attachment; filename="tradeled-backup-${dt}.enc"`,'Content-Length':buf.length});
+    res.end(buf); return;
+  }
+
+  err(res,'Not found',404);
+}
+
+// ── Start ─────────────────────────────────────────────────────────────────────
+loadDB();
+const server=http.createServer(async(req,res)=>{
+  try{ await handleRequest(req,res); }
+  catch(e){ console.error(e); err(res,'Internal server error',500); }
 });
-
-// ---------- health ----------
-app.get('/healthz', (req, res) => res.json({ ok: true }));
-// open /health/db in a browser to check the database connection and tables
-app.get('/health/db', async (req, res) => {
-  const out = {};
-  try { await pool.query('select 1'); out.connection = 'ok'; } catch (e) { out.connection = 'FAILED: ' + e.message; return res.status(500).json(out); }
-  for (const t of ['clients', 'transactions', 'retainer_months', 'contracts', 'leads', 'settings', 'client_balances']) {
-    try { out[t] = Number((await pool.query(`select count(*) n from ${t}`)).rows[0].n); } catch (e) { out[t] = 'MISSING: ' + e.message; }
-  }
-  try { await pool.query('select charge_tx_id from retainer_months limit 1'); out.schema = 'latest'; } catch (e) { out.schema = 'OLD, run schema.sql again: ' + e.message; }
-  res.status(Object.values(out).some(v => String(v).match(/MISSING|OLD|FAILED/)) ? 500 : 200).json(out);
+server.listen(PORT,()=>{
+  console.log(`TradeLedger running on http://localhost:${PORT}`);
+  console.log('Build 2026-11-01b: company-to-company transfers enabled');
+  const broken=db.transactions.filter(t=>t.type==='transfer'&&!t.to_company_id);
+  if(broken.length) console.log(`WARNING: ${broken.length} transfer(s) have no "To" company (saved by an older server). Delete and re-enter them: `+broken.map(t=>'#'+t.id).join(', '));
 });
-
-// ---------- public API ----------
-// The website may be hosted separately (e.g. Netlify/Afrihost); allow it to call these two public routes.
-app.use(['/api/portfolio', '/api/leads'], (req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', process.env.WEBSITE_ORIGIN || '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
-});
-app.get('/api/portfolio', wrap(async (req, res) => {
-  const { rows } = await q('select id, name, category, url, blurb, image_url from portfolio where visible order by sort, id');
-  res.set('Cache-Control', 'public, max-age=300').json(rows);
-}));
-
-app.post('/api/leads', limiter(8, 15 * 60 * 1000), wrap(async (req, res) => {
-  const b = req.body || {};
-  if (b.website) return res.json({ ok: true }); // honeypot
-  const clean = (v, n = 500) => (typeof v === 'string' ? v.trim().slice(0, n) : '') || null;
-  const name = clean(b.name, 120);
-  const email = clean(b.email, 160);
-  const phone = clean(b.phone, 40);
-  if (!name) return res.status(400).json({ error: 'Add your name so we know who to reply to.' });
-  if (!email && !phone) return res.status(400).json({ error: 'Add an email address or phone number so we can get back to you.' });
-  const services = Array.isArray(b.services) ? b.services.map((s) => String(s).slice(0, 60)).slice(0, 12).join(', ') : clean(b.services, 400);
-  // quote builder answers: { "Websites & web apps": { "What do you need?": "Landing page", ... }, ... }
-  let details = null;
-  if (b.details && typeof b.details === 'object' && !Array.isArray(b.details)) {
-    const json = JSON.stringify(b.details);
-    if (json.length <= 20000) details = json;
-  }
-  const lead = [name, clean(b.business, 160), email, phone, services, clean(b.message, 3000), details, clean(b.budget, 60), clean(b.timeline, 60), clean(b.contact_pref, 30)];
-  const { rows } = await q(
-    `insert into leads (name, business, email, phone, services, message, details, budget, timeline, contact_pref)
-     values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10) returning id`, lead);
-  const ref = 'Q-' + String(rows[0].id).padStart(4, '0');
-  notifyLead({ ref, name, business: lead[1], email, phone, services, message: lead[5], details: b.details, budget: lead[7], timeline: lead[8], pref: lead[9] });
-  res.json({ ok: true, ref });
-}));
-
-function notifyLead(l) {
-  if (!process.env.SMTP_HOST || !process.env.NOTIFY_EMAIL) return;
-  const nodemailer = require('nodemailer');
-  const t = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 465),
-    secure: String(process.env.SMTP_PORT || 465) === '465',
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  });
-  const lines = [
-    `Reference: ${l.ref}`, `Name: ${l.name}`, `Business: ${l.business || '-'}`, `Email: ${l.email || '-'}`, `Phone: ${l.phone || '-'}`,
-    `Prefers: ${l.pref || '-'}`, `Services: ${l.services || '-'}`, `Budget: ${l.budget || '-'}`, `Timeline: ${l.timeline || '-'}`, '',
-  ];
-  if (l.details && typeof l.details === 'object') {
-    for (const [svc, answers] of Object.entries(l.details)) {
-      lines.push(`== ${svc} ==`);
-      for (const [qn, ans] of Object.entries(answers || {})) lines.push(`${qn.replace(/\?$/, "")}: ${Array.isArray(ans) ? ans.join(', ') : ans}`);
-      lines.push('');
-    }
-  }
-  lines.push(l.message || '(no extra notes)');
-  t.sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER,
-    to: process.env.NOTIFY_EMAIL,
-    replyTo: l.email || undefined,
-    subject: `${l.ref} quote request: ${l.name}${l.business ? ' (' + l.business + ')' : ''}`,
-    text: lines.join('\n'),
-  }).catch((e) => console.error('[mail]', e.message));
-}
-
-// ---------- auth ----------
-app.post('/api/login', limiter(10, 15 * 60 * 1000), wrap(async (req, res) => {
-  const pw = String((req.body || {}).password || '');
-  if (!pw) return res.status(401).json({ error: 'Type your password.' });
-  let ok = false;
-  if (process.env.ADMIN_PASSWORD_HASH) ok = await bcrypt.compare(pw, process.env.ADMIN_PASSWORD_HASH);
-  else if (process.env.ADMIN_PASSWORD) {
-    const a = Buffer.from(pw), b = Buffer.from(process.env.ADMIN_PASSWORD);
-    ok = a.length === b.length && crypto.timingSafeEqual(a, b);
-  }
-  if (ok) return res.json({ token: jwt.sign({ role: 'admin', name: 'Owner' }, JWT_SECRET, { expiresIn: '12h' }), role: 'admin', name: 'Owner' });
-  // not the owner: each salesperson has their own password, which tells us who they are
-  const u = await findUserByPassword(pw);
-  if (!u) return res.status(401).json({ error: 'That password is incorrect.' });
-  res.json({ token: jwt.sign({ role: u.role, uid: u.id, name: u.name }, JWT_SECRET, { expiresIn: '12h' }), role: u.role, name: u.name });
-}));
-
-async function findUserByPassword(pw, activeOnly = true) {
-  let users = [];
-  try { users = (await q(`select * from app_users ${activeOnly ? 'where active' : ''}`)).rows; } catch { return null; } // table not created yet
-  for (const u of users) if (await bcrypt.compare(pw, u.password_hash)) return u;
-  return null;
-}
-async function isOwnerPassword(pw) {
-  if (process.env.ADMIN_PASSWORD_HASH) return bcrypt.compare(pw, process.env.ADMIN_PASSWORD_HASH);
-  return !!process.env.ADMIN_PASSWORD && pw === process.env.ADMIN_PASSWORD;
-}
-// Passwords must be unique, because the password is what identifies the person.
-async function checkNewPassword(pw, exceptId) {
-  if (pw.length < 6) throw badReq('Password must be at least 6 characters.');
-  if (await isOwnerPassword(pw)) throw badReq("That's your owner password. Choose a different one.");
-  const u = await findUserByPassword(pw, false);
-  if (u && String(u.id) !== String(exceptId)) throw badReq('Someone else already uses that password. Choose a different one.');
-}
-
-// Salespeople can only reach the leads routes, and can't delete anything.
-const SALES_OK = /^\/api\/admin\/(me|lead-stats|leads(\/\d+(\/(activity|contact))?)?|proofs\/\d+)$/;
-async function auth(req, res, next) {
-  const h = req.headers.authorization || '';
-  const path = req.originalUrl.split('?')[0];
-  let token = h.startsWith('Bearer ') ? h.slice(7) : null;
-  if (!token && req.query.t && path.startsWith('/api/admin/proofs/')) token = String(req.query.t); // proof images open in a new tab
-  try { req.user = jwt.verify(token, JWT_SECRET); }
-  catch { return res.status(401).json({ error: 'Your session has ended. Log in again.' }); }
-  if (req.user.role === 'admin') return next();
-  try {
-    const u = (await q('select active from app_users where id=$1', [req.user.uid])).rows[0];
-    if (!u || !u.active) return res.status(401).json({ error: 'Your login has been switched off. Speak to the owner.' });
-  } catch (e) { return res.status(500).json({ error: 'Something went wrong on the server.' }); }
-  if (!SALES_OK.test(path) || req.method === 'DELETE') return res.status(403).json({ error: 'You don\'t have access to that.' });
-  next();
-}
-app.use('/api/admin', auth);
-const isAdmin = (req) => req.user && req.user.role === 'admin';
-const who = (req) => ({ id: req.user.uid || null, name: req.user.name || 'Owner' });
-app.get('/api/admin/me', (req, res) => res.json({ role: req.user.role, name: req.user.name || 'Owner' }));
-
-// ---------- leads + activity log (owner and salespeople) ----------
-const LEAD_COLS = ['name', 'business', 'email', 'phone', 'services', 'message', 'status', 'budget', 'timeline', 'contact_pref'];
-const LEAD_STATUS = ['new', 'contacted', 'follow_up', 'quoted', 'won', 'lost'];
-const HOW = { call: 'Call', whatsapp: 'WhatsApp', email: 'Email', sms: 'SMS', meeting: 'Meeting', walk_in: 'Walk-in', other: 'Other' };
-const badReq = (msg) => { const e = new Error(msg); e.status = 400; e.msgOverride = msg; return e; };
-
-function parseProof(p) {
-  if (!p) return null;
-  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(p));
-  if (!m) throw badReq('The proof must be a photo or screenshot.');
-  const buf = Buffer.from(m[2], 'base64');
-  if (buf.length > 3e6) throw badReq('That picture is too big. Try a screenshot instead.');
-  return { mime: m[1], buf };
-}
-async function addActivity(db, leadId, u, kind, { how = null, note = null, status = null, proof = null } = {}) {
-  const a = (await db.query(
-    `insert into lead_activity (lead_id, user_id, user_name, kind, how, note, status_to) values ($1,$2,$3,$4,$5,$6,$7) returning *`,
-    [leadId, u.id, u.name, kind, how, note, status])).rows[0];
-  if (proof) await db.query('insert into lead_proofs (activity_id, mime, data) values ($1,$2,$3)', [a.id, proof.mime, proof.buf]);
-  await db.query('update leads set updated_at=now() where id=$1', [leadId]);
-  return a;
-}
-function leadBody(b, required) {
-  const v = {};
-  for (const c of LEAD_COLS) if (c in b) v[c] = toNull(typeof b[c] === 'string' ? b[c].trim() : b[c]);
-  if (required || 'name' in v) if (!v.name) throw badReq("Add the lead's name.");
-  if (required && !v.phone && !v.email) throw badReq('Add a phone number or email.');
-  if (v.status && !LEAD_STATUS.includes(v.status)) throw badReq('Choose a valid status.');
-  return v;
-}
-
-app.get('/api/admin/leads', wrap(async (req, res) => {
-  const { rows } = await q(`
-    select l.*, la.created_at as last_at, la.user_name as last_by, la.how as last_how,
-      (select count(*) from lead_activity x where x.lead_id=l.id and x.kind in ('created','contact'))::int as touches
-    from leads l
-    left join lateral (select created_at, user_name, how from lead_activity a where a.lead_id=l.id and a.kind in ('created','contact')
-                       order by created_at desc limit 1) la on true
-    order by l.created_at desc`);
-  res.json(rows);
-}));
-
-app.post('/api/admin/leads', wrap(async (req, res) => {
-  const b = req.body || {}, u = who(req);
-  const v = leadBody(b, true);
-  const proof = parseProof(b.proof);
-  if (!isAdmin(req) && !proof) throw badReq('Upload proof that you contacted this lead: a screenshot of the call log, WhatsApp chat or email.');
-  const how = HOW[b.how] ? b.how : null;
-  if (!isAdmin(req) && !how) throw badReq('Choose how you contacted them.');
-  v.status = v.status || (how ? 'contacted' : 'new');
-  const lead = await inTx(async (db) => {
-    const cols = [...Object.keys(v), 'created_by'], vals = [...Object.values(v), u.name];
-    const l = (await db.query(`insert into leads (${cols.join(',')}) values (${cols.map((_, i) => '$' + (i + 1)).join(',')}) returning *`, vals)).rows[0];
-    await addActivity(db, l.id, u, 'created', { how, note: toNull(b.note), status: l.status, proof });
-    return l;
-  });
-  res.json(lead);
-}));
-
-app.put('/api/admin/leads/:id', wrap(async (req, res) => {
-  const v = leadBody(req.body || {}, false);
-  if (!Object.keys(v).length) throw badReq('Nothing to save.');
-  const out = await inTx(async (db) => {
-    const old = (await db.query('select * from leads where id=$1 for update', [req.params.id])).rows[0];
-    if (!old) { const e = new Error('gone'); e.status = 404; throw e; }
-    const changed = Object.keys(v).filter((k) => String(old[k] ?? '') !== String(v[k] ?? ''));
-    if (!changed.length) return old;
-    const cols = Object.keys(v);
-    const l = (await db.query(`update leads set ${cols.map((c, i) => `${c}=$${i + 1}`).join(',')} where id=$${cols.length + 1} returning *`, [...Object.values(v), req.params.id])).rows[0];
-    await addActivity(db, l.id, who(req), 'edited', { note: 'Changed ' + changed.map((c) => c.replace('_', ' ')).join(', '), status: changed.includes('status') ? l.status : null });
-    return l;
-  });
-  res.json(out);
-}));
-
-app.delete('/api/admin/leads/:id', wrap(async (req, res) => {
-  await q('delete from leads where id=$1', [req.params.id]);
-  res.json({ ok: true });
-}));
-
-// log a contact: call / WhatsApp / email..., with proof
-app.post('/api/admin/leads/:id/contact', wrap(async (req, res) => {
-  const b = req.body || {}, u = who(req);
-  const how = HOW[b.how] ? b.how : null;
-  if (!how) throw badReq('Choose how you contacted them.');
-  const proof = parseProof(b.proof);
-  if (!isAdmin(req) && !proof) throw badReq('Upload proof: a screenshot of the call log, WhatsApp chat or email.');
-  const status = b.status && LEAD_STATUS.includes(b.status) ? b.status : null;
-  const out = await inTx(async (db) => {
-    const l = (await db.query('select * from leads where id=$1 for update', [req.params.id])).rows[0];
-    if (!l) { const e = new Error('gone'); e.status = 404; throw e; }
-    if (status && status !== l.status) await db.query('update leads set status=$1 where id=$2', [status, l.id]);
-    return addActivity(db, l.id, u, 'contact', { how, note: toNull(b.note), status: status && status !== l.status ? status : null, proof });
-  });
-  res.json(out);
-}));
-
-app.get('/api/admin/leads/:id/activity', wrap(async (req, res) => {
-  const { rows } = await q(`select a.*, (p.id is not null) as has_proof from lead_activity a left join lead_proofs p on p.activity_id=a.id
-    where a.lead_id=$1 order by a.created_at desc, a.id desc`, [req.params.id]);
-  res.json(rows);
-}));
-
-app.get('/api/admin/proofs/:activityId', wrap(async (req, res) => {
-  const p = (await q('select mime, data from lead_proofs where activity_id=$1', [req.params.activityId])).rows[0];
-  if (!p) return res.status(404).send('Not found');
-  res.set('Cache-Control', 'private, max-age=86400').type(p.mime).send(p.data);
-}));
-
-// how much each person did per day (SA time). Salespeople only see their own.
-app.get('/api/admin/lead-stats', wrap(async (req, res) => {
-  const mine = isAdmin(req) ? '' : 'and a.user_id = $1';
-  const params = isAdmin(req) ? [] : [req.user.uid];
-  const { rows } = await q(`
-    select to_char((a.created_at at time zone 'Africa/Johannesburg')::date, 'YYYY-MM-DD') as day, a.user_name,
-      count(*) filter (where a.kind in ('created','contact'))::int as contacts,
-      count(*) filter (where a.kind = 'created')::int as new_leads,
-      count(*) filter (where a.status_to = 'won')::int as won,
-      min(a.created_at) as first_at, max(a.created_at) as last_at
-    from lead_activity a
-    where a.created_at >= now() - interval '14 days' and a.kind in ('created','contact') ${mine}
-    group by 1, 2 order by 1 desc, 2`, params);
-  res.json(rows);
-}));
-
-// ---------- team logins (owner only) ----------
-app.get('/api/admin/users', wrap(async (req, res) => {
-  const { rows } = await q(`select u.id, u.name, u.username, u.role, u.active, u.created_at,
-      (select max(created_at) from lead_activity a where a.user_id=u.id) as last_at
-    from app_users u order by u.active desc, lower(u.name)`);
-  res.json(rows);
-}));
-app.post('/api/admin/users', wrap(async (req, res) => {
-  const b = req.body || {};
-  const name = String(b.name || '').trim(), pw = String(b.password || '');
-  if (!name) throw badReq('Add their name.');
-  await checkNewPassword(pw);
-  const username = (name.toLowerCase().replace(/[^a-z0-9]+/g, '.') || 'user') + '.' + crypto.randomBytes(3).toString('hex'); // internal only
-  try {
-    const u = (await q(`insert into app_users (name, username, password_hash) values ($1,$2,$3) returning id, name, username, active`, [name, username, await bcrypt.hash(pw, 10)])).rows[0];
-    res.json(u);
-  } catch (e) { if (e.code === '23505') throw badReq('Try again.'); throw e; }
-}));
-app.put('/api/admin/users/:id', wrap(async (req, res) => {
-  const b = req.body || {}, sets = [], vals = [];
-  if (typeof b.name === 'string' && b.name.trim()) { vals.push(b.name.trim()); sets.push(`name=$${vals.length}`); }
-  if (typeof b.active === 'boolean') { vals.push(b.active); sets.push(`active=$${vals.length}`); }
-  if (b.password) { await checkNewPassword(String(b.password), req.params.id); vals.push(await bcrypt.hash(String(b.password), 10)); sets.push(`password_hash=$${vals.length}`); }
-  if (!sets.length) throw badReq('Nothing to save.');
-  vals.push(req.params.id);
-  const u = (await q(`update app_users set ${sets.join(',')} where id=$${vals.length} returning id, name, username, active`, vals)).rows[0];
-  if (!u) { const e = new Error('gone'); e.status = 404; throw e; }
-  res.json(u);
-}));
-
-// ---------- generic CRUD ----------
-const toNull = (v) => (v === '' || v === undefined ? null : v);
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const monthLabel = (y, m) => `${MONTHS[m - 1]} ${y}`;
-
-const resources = {
-  contracts: {
-    cols: ['client_id', 'title', 'kind', 'value', 'start_date', 'end_date', 'status', 'file_url', 'notes'],
-    list: `select t.*, c.name client_name from contracts t join clients c on c.id=t.client_id order by t.status='active' desc, t.end_date nulls last, t.id desc`,
-  },
-};
-
-for (const [table, cfg] of Object.entries(resources)) {
-  const base = `/api/admin/${table}`;
-  app.get(base, wrap(async (req, res) => res.json((await q(cfg.list)).rows)));
-  app.post(base, wrap(async (req, res) => {
-    const cols = cfg.cols.filter((c) => c in req.body);
-    if (!cols.length) return res.status(400).json({ error: 'Nothing to save.' });
-    const vals = cols.map((c) => toNull(req.body[c]));
-    const sql = `insert into ${table} (${cols.join(',')}) values (${cols.map((_, i) => '$' + (i + 1)).join(',')}) returning *`;
-    res.json((await q(sql, vals)).rows[0]);
-  }));
-  app.put(`${base}/:id`, wrap(async (req, res) => {
-    const cols = cfg.cols.filter((c) => c in req.body);
-    if (!cols.length) return res.status(400).json({ error: 'Nothing to save.' });
-    const vals = cols.map((c) => toNull(req.body[c]));
-    const sql = `update ${table} set ${cols.map((c, i) => `${c}=$${i + 1}`).join(',')} where id=$${cols.length + 1} returning *`;
-    const { rows } = await q(sql, [...vals, req.params.id]);
-    if (!rows.length) return res.status(404).json({ error: 'That record no longer exists.' });
-    res.json(rows[0]);
-  }));
-  app.delete(`${base}/:id`, wrap(async (req, res) => {
-    await q(`delete from ${table} where id=$1`, [req.params.id]);
-    res.json({ ok: true });
-  }));
-}
-
-// ---------- retainer months: create the year, roll over, tick off ----------
-// Every active retainer gets 12 months for the year (N/A before they started, otherwise "not billed yet").
-async function ensureRetainerYear(db, year) {
-  await db.query(`
-    insert into retainer_months (client_id, year, month, status, amount, billable)
-    select c.id, $1::int, m,
-      case when make_date($1::int, m, 1) < date_trunc('month', coalesce(c.retainer_start, current_date))::date then 'na' else null end,
-      0, true
-    from clients c cross join generate_series(1, 12) m
-    where c.billing = 'retainer' and c.retainer_active
-      and (c.retainer_start is null or date_trunc('year', c.retainer_start) <= make_date($1::int, 1, 1))
-    on conflict (client_id, year, month) do nothing`, [year]);
-}
-async function syncRetainers(db = pool) { await ensureRetainerYear(db, new Date().getFullYear()); }
-
-// Tick off the oldest billed, unpaid months a payment fully covers. Returns the months ticked.
-async function allocatePayment(db, tx) {
-  if (tx.type !== 'payment' || !tx.client_id) return [];
-  const { rows: months } = await db.query(
-    `select id, year, month, amount from retainer_months
-     where client_id=$1 and status='not_rec' and amount > 0 and tx_id is null order by year, month`, [tx.client_id]);
-  let left = Number(tx.amount);
-  const ticked = [];
-  for (const m of months) {
-    if (left + 0.001 < Number(m.amount)) break;
-    await db.query(`update retainer_months set status='rec', tx_id=$1 where id=$2`, [tx.id, m.id]);
-    left -= Number(m.amount);
-    ticked.push(monthLabel(m.year, m.month));
-  }
-  return ticked;
-}
-async function releasePayment(db, txId) {
-  await db.query(`update retainer_months set status='not_rec', tx_id=null where tx_id=$1 and status='rec'`, [txId]);
-  await db.query(`update retainer_months set tx_id=null where tx_id=$1`, [txId]);
-}
-// A month's "amount owed" was changed or removed in Transactions: keep the month in step
-async function syncChargeMonths(db, tx, deleted) {
-  if (deleted) {
-    await db.query(`update retainer_months set amount=0, charge_tx_id=null, status=case when status='not_rec' then null else status end where charge_tx_id=$1`, [tx.id]);
-  } else {
-    await db.query(`update retainer_months set amount=$2 where charge_tx_id=$1`, [tx.id, tx.amount]);
-  }
-}
-// Bill (or re-bill) one month for one client. amount 0 = remove the bill.
-async function billMonth(db, clientId, year, month, amount) {
-  amount = Number(amount) || 0;
-  await db.query(`insert into retainer_months (client_id, year, month, status, amount) values ($1,$2,$3,null,0) on conflict do nothing`, [clientId, year, month]);
-  const m = (await db.query('select * from retainer_months where client_id=$1 and year=$2 and month=$3 for update', [clientId, year, month])).rows[0];
-  if (m.charge_tx_id) {
-    if (amount > 0) await db.query('update transactions set amount=$2 where id=$1', [m.charge_tx_id, amount]);
-    else await db.query('delete from transactions where id=$1', [m.charge_tx_id]);
-  } else if (amount > 0) {
-    const txId = (await db.query(
-      `insert into transactions (tx_date, type, client_id, amount, description) values ($1, 'charge', $2, $3, $4) returning id`,
-      [todaySA(), clientId, amount, `Retainer ${monthLabel(year, month)}`])).rows[0].id;
-    await db.query('update retainer_months set charge_tx_id=$1 where id=$2', [txId, m.id]);
-  }
-  const status = amount > 0 ? (m.status === 'rec' ? 'rec' : 'not_rec') : (m.status === 'not_rec' ? null : m.status);
-  return (await db.query(`update retainer_months set amount=$1::numeric, status=$2, billable=true, charge_tx_id=case when $1::numeric > 0 then charge_tx_id else null end where id=$3 returning *`, [amount, status, m.id])).rows[0];
-}
-const todaySA = () => new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 10);
-
-async function inTx(fn) {
-  const db = await pool.connect();
-  try { await db.query('begin'); const out = await fn(db); await db.query('commit'); return out; }
-  catch (e) { await db.query('rollback').catch(() => {}); throw e; }
-  finally { db.release(); }
-}
-
-const BAL = `(b.charges - b.paid)`;
-
-// ---------- clients ----------
-const CLIENT_COLS = ['name', 'contact_person', 'email', 'phone', 'address', 'industry', 'notes', 'billing', 'retainer_active', 'retainer_start'];
-
-app.get('/api/admin/clients', wrap(async (req, res) => {
-  await syncRetainers();
-  const { rows } = await q(`
-    select c.*, ${BAL} as balance,
-      (select count(*) from retainer_months m where m.client_id=c.id and m.status='not_rec')::int as months_unpaid
-    from clients c join client_balances b on b.client_id=c.id
-    order by lower(c.name)`);
-  res.json(rows);
-}));
-
-async function applyRetainerChange(db, before, after) {
-  const now = new Date(); const y = now.getFullYear(), m = now.getMonth() + 1;
-  const wasRet = before.billing === 'retainer' && before.retainer_active;
-  const isRet = after.billing === 'retainer' && after.retainer_active;
-  if (wasRet && !isRet) {
-    // cancelled: every unbilled month after this one becomes N/A
-    await db.query(`update retainer_months set status='na' where client_id=$1 and (year > $2 or (year = $2 and month > $3)) and status is null and charge_tx_id is null`, [after.id, y, m]);
-  } else if (!wasRet && isRet) {
-    await db.query(`update retainer_months set status=null where client_id=$1 and status='na' and charge_tx_id is null and (year > $2 or (year = $2 and month > $3))`, [after.id, y, m]);
-    await ensureRetainerYear(db, y);
-  }
-}
-
-app.post('/api/admin/clients', wrap(async (req, res) => {
-  const b = req.body || {};
-  if (!String(b.name || '').trim()) return res.status(400).json({ error: 'Add the client name.' });
-  const cols = CLIENT_COLS.filter((c) => c in b);
-  const vals = cols.map((c) => toNull(b[c]));
-  const row = await inTx(async (db) => {
-    const r = (await db.query(`insert into clients (${cols.join(',')}) values (${cols.map((_, i) => '$' + (i + 1)).join(',')}) returning *`, vals)).rows[0];
-    if (r.billing === 'retainer' && r.retainer_active) await ensureRetainerYear(db, new Date().getFullYear());
-    return r;
-  });
-  res.json(row);
-}));
-
-app.put('/api/admin/clients/:id', wrap(async (req, res) => {
-  const b = req.body || {};
-  const cols = CLIENT_COLS.filter((c) => c in b);
-  if (!cols.length) return res.status(400).json({ error: 'Nothing to save.' });
-  const row = await inTx(async (db) => {
-    const before = (await db.query('select * from clients where id=$1 for update', [req.params.id])).rows[0];
-    if (!before) { const e = new Error('gone'); e.status = 404; throw e; }
-    const vals = cols.map((c) => toNull(b[c]));
-    const after = (await db.query(`update clients set ${cols.map((c, i) => `${c}=$${i + 1}`).join(',')} where id=$${cols.length + 1} returning *`, [...vals, req.params.id])).rows[0];
-    await applyRetainerChange(db, before, after);
-    return after;
-  });
-  res.json(row);
-}));
-
-app.delete('/api/admin/clients/:id', wrap(async (req, res) => {
-  await q('delete from clients where id=$1', [req.params.id]);
-  res.json({ ok: true });
-}));
-
-// ---------- transactions ----------
-const TX_COLS = ['tx_date', 'type', 'client_id', 'amount', 'description', 'method', 'reference'];
-function txValues(b) {
-  const bad = (msg) => { const e = new Error(msg); e.status = 400; e.msgOverride = msg; throw e; };
-  if (!['payment', 'expense', 'charge', 'credit'].includes(b.type)) bad('Choose what kind of transaction this is.');
-  if (!(Number(b.amount) > 0)) bad('Enter an amount above zero.');
-  if (['charge', 'credit'].includes(b.type) && !b.client_id) bad('Choose the client.');
-  if (b.type !== 'payment' && !b.description && !b.client_id) bad('Add details, for example: Shopify, Meta ads, Kwik Print.');
-  const v = { ...b, tx_date: b.tx_date || todaySA() };
-  if (b.type === 'expense') v.client_id = null;   // money out is never linked to a debtor
-  return TX_COLS.map((c) => toNull(v[c]));
-}
-const MONTHS_FOR = (col) => `(select string_agg(to_char(make_date(m.year, m.month, 1), 'Mon YYYY'), ', ' order by m.year, m.month) from retainer_months m where m.${col} = t.id)`;
-
-app.get('/api/admin/transactions', wrap(async (req, res) => {
-  const { rows } = await q(`
-    select t.*, c.name client_name, c.billing, ${MONTHS_FOR('tx_id')} as months, ${MONTHS_FOR('charge_tx_id')} as billed_for,
-      case when t.type in ('payment','expense') then
-        sum(case t.type when 'payment' then t.amount when 'expense' then -t.amount else 0 end) over (order by t.tx_date, t.id)
-      end as running
-    from transactions t left join clients c on c.id = t.client_id
-    order by t.tx_date desc, t.id desc`);
-  res.json(rows);
-}));
-
-app.post('/api/admin/transactions', wrap(async (req, res) => {
-  const b = req.body || {};
-  const vals = txValues(b);
-  const out = await inTx(async (db) => {
-    const tx = (await db.query(`insert into transactions (${TX_COLS.join(',')}) values (${TX_COLS.map((_, i) => '$' + (i + 1)).join(',')}) returning *`, vals)).rows[0];
-    const ticked = b.allocate === false ? [] : await allocatePayment(db, tx);
-    return { ...tx, ticked };
-  });
-  res.json(out);
-}));
-
-app.put('/api/admin/transactions/:id', wrap(async (req, res) => {
-  const b = req.body || {};
-  const vals = txValues(b);
-  const out = await inTx(async (db) => {
-    await releasePayment(db, req.params.id);
-    const tx = (await db.query(`update transactions set ${TX_COLS.map((c, i) => `${c}=$${i + 1}`).join(',')}, auto=false where id=$${TX_COLS.length + 1} returning *`, [...vals, req.params.id])).rows[0];
-    if (!tx) { const e = new Error('gone'); e.status = 404; throw e; }
-    if (tx.type === 'charge') await syncChargeMonths(db, tx, false);
-    const ticked = b.allocate === false ? [] : await allocatePayment(db, tx);
-    return { ...tx, ticked };
-  });
-  res.json(out);
-}));
-
-app.delete('/api/admin/transactions/:id', wrap(async (req, res) => {
-  await inTx(async (db) => {
-    await releasePayment(db, req.params.id);
-    await syncChargeMonths(db, { id: req.params.id }, true);
-    await db.query('delete from transactions where id=$1', [req.params.id]);
-  });
-  res.json({ ok: true });
-}));
-
-// ---------- retainer tracker ----------
-app.get('/api/admin/retainers', wrap(async (req, res) => {
-  const now = new Date().getFullYear();
-  const year = Number(req.query.year) || now;
-  await syncRetainers();
-  if (year > now && year <= now + 1) await ensureRetainerYear(pool, year);
-  const { rows: months } = await q(`select id, client_id, month, status, amount, tx_id, charge_tx_id from retainer_months where year=$1 order by client_id, month`, [year]);
-  const ids = [...new Set(months.map((m) => m.client_id))];
-  const { rows: clients } = ids.length ? await q(`select c.id, c.name, c.billing, c.retainer_active from clients c where c.id = any($1) order by lower(c.name)`, [ids]) : { rows: [] };
-  const { rows: yrs } = await q('select distinct year from retainer_months order by year');
-  const years = [...new Set([...yrs.map((r) => r.year), now, now + 1])].sort();
-  res.json({ year, years, clients: clients.map((c) => ({ ...c, months: months.filter((m) => m.client_id === c.id) })) });
-}));
-
-// Change one month's status or amount
-app.put('/api/admin/retainers/:id', wrap(async (req, res) => {
-  const out = await inTx(async (db) => {
-    let m = (await db.query(`select * from retainer_months where id=$1 for update`, [req.params.id])).rows[0];
-    if (!m) { const e = new Error('gone'); e.status = 404; throw e; }
-    if ('amount' in req.body) m = await billMonth(db, m.client_id, m.year, m.month, req.body.amount);
-    if (!('status' in req.body)) return m;
-    const status = req.body.status === '' ? null : req.body.status;
-    if (![null, 'rec', 'not_rec', 'na'].includes(status)) { const e = new Error('x'); e.status = 400; e.msgOverride = 'Choose received, not received or N/A.'; throw e; }
-    if (m.status === status) return m;
-    if (m.status === 'rec' && m.tx_id) {
-      const tx = (await db.query('select * from transactions where id=$1', [m.tx_id])).rows[0];
-      await db.query('update retainer_months set tx_id=null where id=$1', [m.id]);
-      if (tx && tx.auto) await db.query('delete from transactions where id=$1', [tx.id]);
-    }
-    if (status === 'na' && m.charge_tx_id) m = await billMonth(db, m.client_id, m.year, m.month, 0); // no fee this month: remove the bill
-    let txId = null;
-    if (status === 'rec' && Number(m.amount) > 0) {
-      txId = (await db.query(
-        `insert into transactions (tx_date, type, client_id, amount, description, method, auto) values ($1, 'payment', $2, $3, $4, 'EFT', true) returning id`,
-        [todaySA(), m.client_id, m.amount, `Retainer ${monthLabel(m.year, m.month)}`])).rows[0].id;
-    }
-    return (await db.query('update retainer_months set status=$1, tx_id=$2 where id=$3 returning *', [status, txId, m.id])).rows[0];
-  });
-  res.json(out);
-}));
-
-// Monthly billing: list every active retainer for a month, with what was billed last time
-app.get('/api/admin/retainers/bill', wrap(async (req, res) => {
-  const y = Number(req.query.year), m = Number(req.query.month);
-  await ensureRetainerYear(pool, y);
-  const { rows } = await q(`
-    select c.id client_id, c.name, rm.id month_id, rm.status, rm.amount, rm.charge_tx_id,
-      (select p.amount from retainer_months p where p.client_id=c.id and p.amount > 0 and (p.year < $1 or (p.year = $1 and p.month < $2)) order by p.year desc, p.month desc limit 1) as last_amount
-    from clients c left join retainer_months rm on rm.client_id=c.id and rm.year=$1 and rm.month=$2
-    where c.billing='retainer' and c.retainer_active and (c.retainer_start is null or c.retainer_start <= make_date($1, $2, 1))
-      and coalesce(rm.status, '') <> 'na'
-    order by lower(c.name)`, [y, m]);
-  res.json(rows);
-}));
-app.post('/api/admin/retainers/bill', wrap(async (req, res) => {
-  const { year, month, items } = req.body || {};
-  if (!year || !month || !Array.isArray(items)) return res.status(400).json({ error: 'Choose a month and enter amounts.' });
-  const done = await inTx(async (db) => {
-    let n = 0, total = 0;
-    for (const it of items) {
-      if (it.amount === '' || it.amount == null) continue;
-      await billMonth(db, it.client_id, year, month, it.amount);
-      if (Number(it.amount) > 0) { n++; total += Number(it.amount); }
-    }
-    return { n, total };
-  });
-  res.json(done);
-}));
-
-// ---------- client statement ----------
-app.get('/api/admin/clients/:id/statement', wrap(async (req, res) => {
-  const id = req.params.id;
-  await syncRetainers();
-  const c = (await q(`select c.*, ${BAL} as balance, b.charges, b.paid from clients c join client_balances b on b.client_id=c.id where c.id=$1`, [id])).rows[0];
-  if (!c) return res.status(404).json({ error: 'That client no longer exists.' });
-  const [tx, months, con] = await Promise.all([
-    q(`select t.*, ${MONTHS_FOR('tx_id')} months, ${MONTHS_FOR('charge_tx_id')} billed_for from transactions t where client_id=$1 order by tx_date desc, id desc`, [id]),
-    q('select * from retainer_months where client_id=$1 order by year desc, month', [id]),
-    q('select * from contracts where client_id=$1 order by start_date desc nulls last', [id]),
-  ]);
-  res.json({ client: c, transactions: tx.rows, months: months.rows, contracts: con.rows });
-}));
-
-// ---------- debtors ----------
-app.get('/api/admin/debtors', wrap(async (req, res) => {
-  await syncRetainers();
-  const { rows } = await q(`
-    select c.id, c.name, c.phone, c.billing, c.retainer_active, ${BAL} as balance,
-      (select string_agg(to_char(make_date(m.year, m.month, 1), 'Mon YY'), ', ' order by m.year, m.month)
-         from retainer_months m where m.client_id=c.id and m.status='not_rec') as unpaid_months,
-      (select max(tx_date) from transactions t where t.client_id=c.id and t.type='payment') as last_paid
-    from clients c join client_balances b on b.client_id=c.id
-    where ${BAL} <> 0
-    order by ${BAL} desc`);
-  res.json(rows);
-}));
-
-// ---------- dashboard ----------
-app.get('/api/admin/dashboard', wrap(async (req, res) => {
-  await syncRetainers();
-  const one = async (sql) => Number((await q(sql)).rows[0].v || 0);
-  const m = `date_trunc('month', current_date)`;
-  const [incomeMonth, incomeLast, billedMonth, outstanding, activeRet, unbilled, newLeads, notRecCount, notRecAmt, outMonth, bank] = await Promise.all([
-    one(`select sum(amount) v from transactions where type='payment' and tx_date >= ${m}`),
-    one(`select sum(amount) v from transactions where type='payment' and tx_date >= ${m} - interval '1 month' and tx_date < ${m}`),
-    one(`select sum(amount) v from transactions where type='charge' and tx_date >= ${m} and coalesce(description,'') not like 'Opening balance%'`),
-    one(`select sum(greatest(${BAL}, 0)) v from client_balances b`),
-    one(`select count(*) v from clients where billing='retainer' and retainer_active and (retainer_start is null or retainer_start <= current_date)`),
-    one(`select count(*) v from retainer_months m join clients c on c.id=m.client_id where c.retainer_active and c.billing='retainer' and m.status is null
-           and m.year=extract(year from current_date) and m.month=extract(month from current_date)`),
-    one(`select count(*) v from leads where status = 'new'`),
-    one(`select count(*) v from retainer_months where status='not_rec' and amount > 0`),
-    one(`select sum(amount) v from retainer_months where status='not_rec' and amount > 0`),
-    one(`select sum(amount) v from transactions where type='expense' and tx_date >= ${m}`),
-    one(`select sum(case type when 'payment' then amount else -amount end) v from transactions where type in ('payment','expense')`),
-  ]);
-  const series = (await q(`
-    with months as (select generate_series(${m} - interval '11 months', ${m}, interval '1 month')::date as month)
-    select to_char(mo.month,'Mon YY') label, mo.month,
-      coalesce((select sum(amount) from transactions where type='payment' and date_trunc('month', tx_date) = mo.month),0) income,
-      coalesce((select sum(amount) from transactions where type='charge' and coalesce(description,'') not like 'Opening balance%' and date_trunc('month', tx_date) = mo.month),0) billed,
-      coalesce((select sum(amount) from transactions where type='expense' and date_trunc('month', tx_date) = mo.month),0) out
-    from months mo order by mo.month`)).rows;
-  const topDebtors = (await q(`select c.id client_id, c.name client_name, c.billing, ${BAL} balance from clients c join client_balances b on b.client_id=c.id
-    where ${BAL} > 0 order by ${BAL} desc limit 6`)).rows;
-  const ending = (await q(`select k.id, k.title, k.end_date, k.value, k.kind, c.name client_name from contracts k join clients c on c.id=k.client_id
-    where k.status='active' and k.end_date between current_date and current_date + 45 order by k.end_date`)).rows;
-  const recentPayments = (await q(`select t.amount, t.tx_date paid_on, t.method, case when c.name is null then null else t.description end description, coalesce(c.name, t.description, 'Money in') client_name from transactions t
-    left join clients c on c.id=t.client_id where t.type='payment' order by t.tx_date desc, t.id desc limit 6`)).rows;
-  res.json({
-    kpis: { incomeMonth, incomeLast, billedMonth, outstanding, activeRet, unbilled, newLeads, notRecCount, notRecAmt, outMonth, bank },
-    series, topDebtors, ending, recentPayments,
-  });
-}));
-
-// ---------- settings ----------
-app.get('/api/admin/settings', wrap(async (req, res) => {
-  const r = await q('select data from settings where id=1');
-  res.json(r.rows[0] ? r.rows[0].data : {});
-}));
-app.put('/api/admin/settings', wrap(async (req, res) => {
-  const r = await q(`insert into settings (id, data) values (1, $1) on conflict (id) do update set data = excluded.data returning data`, [req.body || {}]);
-  res.json(r.rows[0].data);
-}));
-
-app.use('/api', (req, res) => res.status(404).json({ error: 'Unknown API route.' }));
-
-// ---------- static ----------
-// Works with either layout:
-//   1) repo with folders:  backend/server.js + admin/index.html + frontend/index.html
-//   2) flat repo:          server.js + index.html (admin panel) [+ public/index.html for the website]
-const fs = require('fs');
-const has = (dir) => fs.existsSync(path.join(dir, 'index.html'));
-const pick = (...dirs) => dirs.find(has);
-const ADMIN_DIR = pick(path.join(__dirname, '..', 'admin'), path.join(__dirname, 'admin'));
-const FRONT_DIR = pick(path.join(__dirname, '..', 'frontend'), path.join(__dirname, 'frontend'), path.join(__dirname, 'public'));
-const FLAT_INDEX = has(__dirname) ? path.join(__dirname, 'index.html') : null; // flat repo: root index.html is the admin panel
-
-if (ADMIN_DIR) app.use('/admin', express.static(ADMIN_DIR, { index: 'index.html' }));
-else if (FLAT_INDEX) app.get(['/admin', '/admin/'], (req, res) => res.sendFile(FLAT_INDEX));
-
-if (FRONT_DIR) {
-  app.use(express.static(FRONT_DIR, { extensions: ['html'], maxAge: '1h' }));
-  app.use((req, res) => res.status(404).sendFile(path.join(FRONT_DIR, 'index.html')));
-} else if (FLAT_INDEX) {
-  // no public website in this repo: send visitors to the admin panel
-  app.get('/', (req, res) => res.redirect('/admin'));
-  app.use((req, res) => res.status(404).send('Not found'));
-} else {
-  app.use((req, res) => res.status(404).send('Not found'));
-}
-console.log(`[static] admin: ${ADMIN_DIR || FLAT_INDEX || 'none'} | website: ${FRONT_DIR || 'none'}`);
-
-app.listen(PORT, () => console.log(`THOS running on :${PORT}`));
