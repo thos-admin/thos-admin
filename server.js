@@ -56,7 +56,9 @@ function limiter(max, windowMs) {
 
 const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => {
   console.error('[api]', req.method, req.path, e.message);
-  const msg = e.code === '23503' ? 'This record is linked to something that no longer exists, or is still used elsewhere.'
+  const msg = e.msgOverride ? e.msgOverride
+            : e.status === 404 ? 'That record no longer exists.'
+            : e.code === '23503' ? 'This record is linked to something that no longer exists, or is still used elsewhere.'
             : e.code === '23514' ? 'One of the values is not allowed. Check amounts are above zero and options are valid.'
             : e.code === '23505' ? 'That value already exists. Use a different one.'
             : e.code === '22P02' || e.code === '22007' || e.code === '22008' ? 'One of the fields has the wrong format. Check dates and amounts.'
@@ -159,51 +161,23 @@ app.use('/api/admin', auth);
 
 // ---------- generic CRUD ----------
 const toNull = (v) => (v === '' || v === undefined ? null : v);
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const monthLabel = (y, m) => `${MONTHS[m - 1]} ${y}`;
 
 const resources = {
-  clients: {
-    cols: ['name', 'contact_person', 'email', 'phone', 'address', 'industry', 'status', 'notes'],
-    list: `select c.*,
-             coalesce((select sum(total) from invoice_summary s where s.client_id=c.id and s.status not in ('void','draft')),0)
-             - coalesce((select sum(amount) from payments p where p.client_id=c.id),0)
-             - coalesce((select sum(amount) from credit_notes n where n.client_id=c.id),0) as balance,
-             (select count(*) from contracts k where k.client_id=c.id and k.status='active')::int as active_contracts
-           from clients c order by c.name`,
-  },
   contracts: {
     cols: ['client_id', 'title', 'kind', 'value', 'start_date', 'end_date', 'status', 'file_url', 'notes'],
     list: `select t.*, c.name client_name from contracts t join clients c on c.id=t.client_id order by t.status='active' desc, t.end_date nulls last, t.id desc`,
   },
-  payments: {
-    cols: ['client_id', 'invoice_id', 'amount', 'paid_on', 'method', 'reference', 'notes'],
-    list: `select t.*, c.name client_name, i.number invoice_number from payments t join clients c on c.id=t.client_id left join invoices i on i.id=t.invoice_id order by t.paid_on desc, t.id desc`,
-  },
-  credit_notes: {
-    cols: ['client_id', 'invoice_id', 'amount', 'issued_on', 'reason'],
-    list: `select t.*, c.name client_name, i.number invoice_number from credit_notes t join clients c on c.id=t.client_id left join invoices i on i.id=t.invoice_id order by t.issued_on desc, t.id desc`,
-  },
-  ad_spend: {
-    cols: ['client_id', 'platform', 'month', 'budget', 'spend', 'fee', 'notes'],
-    list: `select t.*, c.name client_name from ad_spend t join clients c on c.id=t.client_id order by t.month desc, c.name`,
-  },
-  expenses: {
-    cols: ['spent_on', 'category', 'supplier', 'description', 'amount', 'client_id'],
-    list: `select t.*, c.name client_name from expenses t left join clients c on c.id=t.client_id order by t.spent_on desc, t.id desc`,
-  },
   leads: {
     cols: ['name', 'business', 'email', 'phone', 'services', 'message', 'status', 'budget', 'timeline', 'contact_pref'],
     list: `select * from leads order by created_at desc`,
-  },
-  portfolio: {
-    cols: ['name', 'category', 'url', 'blurb', 'image_url', 'sort', 'visible'],
-    list: `select * from portfolio order by sort, id`,
   },
 };
 
 for (const [table, cfg] of Object.entries(resources)) {
   const base = `/api/admin/${table}`;
   app.get(base, wrap(async (req, res) => res.json((await q(cfg.list)).rows)));
-
   app.post(base, wrap(async (req, res) => {
     const cols = cfg.cols.filter((c) => c in req.body);
     if (!cols.length) return res.status(400).json({ error: 'Nothing to save.' });
@@ -211,7 +185,6 @@ for (const [table, cfg] of Object.entries(resources)) {
     const sql = `insert into ${table} (${cols.join(',')}) values (${cols.map((_, i) => '$' + (i + 1)).join(',')}) returning *`;
     res.json((await q(sql, vals)).rows[0]);
   }));
-
   app.put(`${base}/:id`, wrap(async (req, res) => {
     const cols = cfg.cols.filter((c) => c in req.body);
     if (!cols.length) return res.status(400).json({ error: 'Nothing to save.' });
@@ -221,150 +194,324 @@ for (const [table, cfg] of Object.entries(resources)) {
     if (!rows.length) return res.status(404).json({ error: 'That record no longer exists.' });
     res.json(rows[0]);
   }));
-
   app.delete(`${base}/:id`, wrap(async (req, res) => {
     await q(`delete from ${table} where id=$1`, [req.params.id]);
     res.json({ ok: true });
   }));
 }
 
-// ---------- invoices ----------
-app.get('/api/admin/invoices', wrap(async (req, res) => {
-  res.json((await q('select * from invoice_summary order by issue_date desc, id desc')).rows);
-}));
-
-app.get('/api/admin/invoices/:id', wrap(async (req, res) => {
-  const id = req.params.id;
-  const inv = (await q('select s.*, c.email client_email, c.address client_address, c.contact_person, c.phone client_phone from invoice_summary s join clients c on c.id=s.client_id where s.id=$1', [id])).rows[0];
-  if (!inv) return res.status(404).json({ error: 'That invoice no longer exists.' });
-  const [items, payments, credits] = await Promise.all([
-    q('select * from invoice_items where invoice_id=$1 order by sort, id', [id]),
-    q('select * from payments where invoice_id=$1 order by paid_on', [id]),
-    q('select * from credit_notes where invoice_id=$1 order by issued_on', [id]),
-  ]);
-  res.json({ ...inv, items: items.rows, payments: payments.rows, credits: credits.rows });
-}));
-
-async function saveInvoice(req, res, id) {
-  const b = req.body || {};
-  const items = Array.isArray(b.items) ? b.items.filter((i) => i && String(i.description || '').trim()) : [];
-  if (!b.client_id) return res.status(400).json({ error: 'Choose a client for this invoice.' });
-  if (!items.length) return res.status(400).json({ error: 'Add at least one line item.' });
-  const client = await pool.connect();
-  try {
-    await client.query('begin');
-    const f = [b.client_id, toNull(b.contract_id), toNull(b.issue_date), toNull(b.due_date), b.status || 'sent', toNull(b.notes)];
-    let invId = id;
-    if (id) {
-      const r = await client.query(
-        `update invoices set client_id=$1, contract_id=$2, issue_date=coalesce($3::date, issue_date), due_date=coalesce($4::date, due_date), status=$5, notes=$6 where id=$7 returning id`,
-        [...f, id]);
-      if (!r.rows.length) { await client.query('rollback'); return res.status(404).json({ error: 'That invoice no longer exists.' }); }
-      await client.query('delete from invoice_items where invoice_id=$1', [id]);
-    } else {
-      const r = await client.query(
-        `insert into invoices (client_id, contract_id, issue_date, due_date, status, notes)
-         values ($1,$2,coalesce($3::date,current_date),coalesce($4::date,current_date+7),$5,$6) returning id`, f);
-      invId = r.rows[0].id;
-    }
-    for (const [i, it] of items.entries()) {
-      await client.query('insert into invoice_items (invoice_id, description, qty, unit_price, sort) values ($1,$2,$3,$4,$5)',
-        [invId, String(it.description).slice(0, 500), Number(it.qty) || 1, Number(it.unit_price) || 0, i]);
-    }
-    await client.query('commit');
-    res.json((await q('select * from invoice_summary where id=$1', [invId])).rows[0]);
-  } catch (e) { await client.query('rollback').catch(() => {}); throw e; }
-  finally { client.release(); }
+// ---------- retainer months: create the year, roll over, tick off ----------
+// Every active retainer gets 12 months for the year (N/A before they started, otherwise "not billed yet").
+async function ensureRetainerYear(db, year) {
+  await db.query(`
+    insert into retainer_months (client_id, year, month, status, amount, billable)
+    select c.id, $1::int, m,
+      case when make_date($1::int, m, 1) < date_trunc('month', coalesce(c.retainer_start, current_date))::date then 'na' else null end,
+      0, true
+    from clients c cross join generate_series(1, 12) m
+    where c.billing = 'retainer' and c.retainer_active
+      and (c.retainer_start is null or date_trunc('year', c.retainer_start) <= make_date($1::int, 1, 1))
+    on conflict (client_id, year, month) do nothing`, [year]);
 }
-app.post('/api/admin/invoices', wrap((req, res) => saveInvoice(req, res, null)));
-app.put('/api/admin/invoices/:id', wrap((req, res) => saveInvoice(req, res, req.params.id)));
-app.delete('/api/admin/invoices/:id', wrap(async (req, res) => {
-  await q('delete from invoices where id=$1', [req.params.id]);
+async function syncRetainers(db = pool) { await ensureRetainerYear(db, new Date().getFullYear()); }
+
+// Tick off the oldest billed, unpaid months a payment fully covers. Returns the months ticked.
+async function allocatePayment(db, tx) {
+  if (tx.type !== 'payment' || !tx.client_id) return [];
+  const { rows: months } = await db.query(
+    `select id, year, month, amount from retainer_months
+     where client_id=$1 and status='not_rec' and amount > 0 and tx_id is null order by year, month`, [tx.client_id]);
+  let left = Number(tx.amount);
+  const ticked = [];
+  for (const m of months) {
+    if (left + 0.001 < Number(m.amount)) break;
+    await db.query(`update retainer_months set status='rec', tx_id=$1 where id=$2`, [tx.id, m.id]);
+    left -= Number(m.amount);
+    ticked.push(monthLabel(m.year, m.month));
+  }
+  return ticked;
+}
+async function releasePayment(db, txId) {
+  await db.query(`update retainer_months set status='not_rec', tx_id=null where tx_id=$1 and status='rec'`, [txId]);
+  await db.query(`update retainer_months set tx_id=null where tx_id=$1`, [txId]);
+}
+// A month's "amount owed" was changed or removed in Transactions: keep the month in step
+async function syncChargeMonths(db, tx, deleted) {
+  if (deleted) {
+    await db.query(`update retainer_months set amount=0, charge_tx_id=null, status=case when status='not_rec' then null else status end where charge_tx_id=$1`, [tx.id]);
+  } else {
+    await db.query(`update retainer_months set amount=$2 where charge_tx_id=$1`, [tx.id, tx.amount]);
+  }
+}
+// Bill (or re-bill) one month for one client. amount 0 = remove the bill.
+async function billMonth(db, clientId, year, month, amount) {
+  amount = Number(amount) || 0;
+  await db.query(`insert into retainer_months (client_id, year, month, status, amount) values ($1,$2,$3,null,0) on conflict do nothing`, [clientId, year, month]);
+  const m = (await db.query('select * from retainer_months where client_id=$1 and year=$2 and month=$3 for update', [clientId, year, month])).rows[0];
+  if (m.charge_tx_id) {
+    if (amount > 0) await db.query('update transactions set amount=$2 where id=$1', [m.charge_tx_id, amount]);
+    else await db.query('delete from transactions where id=$1', [m.charge_tx_id]);
+  } else if (amount > 0) {
+    const txId = (await db.query(
+      `insert into transactions (tx_date, type, client_id, amount, description) values ($1, 'charge', $2, $3, $4) returning id`,
+      [todaySA(), clientId, amount, `Retainer ${monthLabel(year, month)}`])).rows[0].id;
+    await db.query('update retainer_months set charge_tx_id=$1 where id=$2', [txId, m.id]);
+  }
+  const status = amount > 0 ? (m.status === 'rec' ? 'rec' : 'not_rec') : (m.status === 'not_rec' ? null : m.status);
+  return (await db.query(`update retainer_months set amount=$1::numeric, status=$2, billable=true, charge_tx_id=case when $1::numeric > 0 then charge_tx_id else null end where id=$3 returning *`, [amount, status, m.id])).rows[0];
+}
+const todaySA = () => new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 10);
+
+async function inTx(fn) {
+  const db = await pool.connect();
+  try { await db.query('begin'); const out = await fn(db); await db.query('commit'); return out; }
+  catch (e) { await db.query('rollback').catch(() => {}); throw e; }
+  finally { db.release(); }
+}
+
+const BAL = `(b.charges - b.paid)`;
+
+// ---------- clients ----------
+const CLIENT_COLS = ['name', 'contact_person', 'email', 'phone', 'address', 'industry', 'notes', 'billing', 'retainer_active', 'retainer_start'];
+
+app.get('/api/admin/clients', wrap(async (req, res) => {
+  await syncRetainers();
+  const { rows } = await q(`
+    select c.*, ${BAL} as balance,
+      (select count(*) from retainer_months m where m.client_id=c.id and m.status='not_rec')::int as months_unpaid
+    from clients c join client_balances b on b.client_id=c.id
+    order by lower(c.name)`);
+  res.json(rows);
+}));
+
+async function applyRetainerChange(db, before, after) {
+  const now = new Date(); const y = now.getFullYear(), m = now.getMonth() + 1;
+  const wasRet = before.billing === 'retainer' && before.retainer_active;
+  const isRet = after.billing === 'retainer' && after.retainer_active;
+  if (wasRet && !isRet) {
+    // cancelled: every unbilled month after this one becomes N/A
+    await db.query(`update retainer_months set status='na' where client_id=$1 and (year > $2 or (year = $2 and month > $3)) and status is null and charge_tx_id is null`, [after.id, y, m]);
+  } else if (!wasRet && isRet) {
+    await db.query(`update retainer_months set status=null where client_id=$1 and status='na' and charge_tx_id is null and (year > $2 or (year = $2 and month > $3))`, [after.id, y, m]);
+    await ensureRetainerYear(db, y);
+  }
+}
+
+app.post('/api/admin/clients', wrap(async (req, res) => {
+  const b = req.body || {};
+  if (!String(b.name || '').trim()) return res.status(400).json({ error: 'Add the client name.' });
+  const cols = CLIENT_COLS.filter((c) => c in b);
+  const vals = cols.map((c) => toNull(b[c]));
+  const row = await inTx(async (db) => {
+    const r = (await db.query(`insert into clients (${cols.join(',')}) values (${cols.map((_, i) => '$' + (i + 1)).join(',')}) returning *`, vals)).rows[0];
+    if (r.billing === 'retainer' && r.retainer_active) await ensureRetainerYear(db, new Date().getFullYear());
+    return r;
+  });
+  res.json(row);
+}));
+
+app.put('/api/admin/clients/:id', wrap(async (req, res) => {
+  const b = req.body || {};
+  const cols = CLIENT_COLS.filter((c) => c in b);
+  if (!cols.length) return res.status(400).json({ error: 'Nothing to save.' });
+  const row = await inTx(async (db) => {
+    const before = (await db.query('select * from clients where id=$1 for update', [req.params.id])).rows[0];
+    if (!before) { const e = new Error('gone'); e.status = 404; throw e; }
+    const vals = cols.map((c) => toNull(b[c]));
+    const after = (await db.query(`update clients set ${cols.map((c, i) => `${c}=$${i + 1}`).join(',')} where id=$${cols.length + 1} returning *`, [...vals, req.params.id])).rows[0];
+    await applyRetainerChange(db, before, after);
+    return after;
+  });
+  res.json(row);
+}));
+
+app.delete('/api/admin/clients/:id', wrap(async (req, res) => {
+  await q('delete from clients where id=$1', [req.params.id]);
   res.json({ ok: true });
+}));
+
+// ---------- transactions ----------
+const TX_COLS = ['tx_date', 'type', 'client_id', 'amount', 'description', 'method', 'reference'];
+function txValues(b) {
+  const bad = (msg) => { const e = new Error(msg); e.status = 400; e.msgOverride = msg; throw e; };
+  if (!['payment', 'charge', 'credit'].includes(b.type)) bad('Choose what kind of transaction this is.');
+  if (!(Number(b.amount) > 0)) bad('Enter an amount above zero.');
+  if (!b.client_id) bad('Choose the client.');
+  const v = { ...b, tx_date: b.tx_date || todaySA() };
+  return TX_COLS.map((c) => toNull(v[c]));
+}
+const MONTHS_FOR = (col) => `(select string_agg(to_char(make_date(m.year, m.month, 1), 'Mon YYYY'), ', ' order by m.year, m.month) from retainer_months m where m.${col} = t.id)`;
+
+app.get('/api/admin/transactions', wrap(async (req, res) => {
+  const { rows } = await q(`
+    select t.*, c.name client_name, c.billing, ${MONTHS_FOR('tx_id')} as months, ${MONTHS_FOR('charge_tx_id')} as billed_for
+    from transactions t left join clients c on c.id = t.client_id
+    order by t.tx_date desc, t.id desc`);
+  res.json(rows);
+}));
+
+app.post('/api/admin/transactions', wrap(async (req, res) => {
+  const b = req.body || {};
+  const vals = txValues(b);
+  const out = await inTx(async (db) => {
+    const tx = (await db.query(`insert into transactions (${TX_COLS.join(',')}) values (${TX_COLS.map((_, i) => '$' + (i + 1)).join(',')}) returning *`, vals)).rows[0];
+    const ticked = b.allocate === false ? [] : await allocatePayment(db, tx);
+    return { ...tx, ticked };
+  });
+  res.json(out);
+}));
+
+app.put('/api/admin/transactions/:id', wrap(async (req, res) => {
+  const b = req.body || {};
+  const vals = txValues(b);
+  const out = await inTx(async (db) => {
+    await releasePayment(db, req.params.id);
+    const tx = (await db.query(`update transactions set ${TX_COLS.map((c, i) => `${c}=$${i + 1}`).join(',')}, auto=false where id=$${TX_COLS.length + 1} returning *`, [...vals, req.params.id])).rows[0];
+    if (!tx) { const e = new Error('gone'); e.status = 404; throw e; }
+    if (tx.type === 'charge') await syncChargeMonths(db, tx, false);
+    const ticked = b.allocate === false ? [] : await allocatePayment(db, tx);
+    return { ...tx, ticked };
+  });
+  res.json(out);
+}));
+
+app.delete('/api/admin/transactions/:id', wrap(async (req, res) => {
+  await inTx(async (db) => {
+    await releasePayment(db, req.params.id);
+    await syncChargeMonths(db, { id: req.params.id }, true);
+    await db.query('delete from transactions where id=$1', [req.params.id]);
+  });
+  res.json({ ok: true });
+}));
+
+// ---------- retainer tracker ----------
+app.get('/api/admin/retainers', wrap(async (req, res) => {
+  const now = new Date().getFullYear();
+  const year = Number(req.query.year) || now;
+  await syncRetainers();
+  if (year > now && year <= now + 1) await ensureRetainerYear(pool, year);
+  const { rows: months } = await q(`select id, client_id, month, status, amount, tx_id, charge_tx_id from retainer_months where year=$1 order by client_id, month`, [year]);
+  const ids = [...new Set(months.map((m) => m.client_id))];
+  const { rows: clients } = ids.length ? await q(`select c.id, c.name, c.billing, c.retainer_active from clients c where c.id = any($1) order by lower(c.name)`, [ids]) : { rows: [] };
+  const { rows: yrs } = await q('select distinct year from retainer_months order by year');
+  const years = [...new Set([...yrs.map((r) => r.year), now, now + 1])].sort();
+  res.json({ year, years, clients: clients.map((c) => ({ ...c, months: months.filter((m) => m.client_id === c.id) })) });
+}));
+
+// Change one month's status or amount
+app.put('/api/admin/retainers/:id', wrap(async (req, res) => {
+  const out = await inTx(async (db) => {
+    let m = (await db.query(`select * from retainer_months where id=$1 for update`, [req.params.id])).rows[0];
+    if (!m) { const e = new Error('gone'); e.status = 404; throw e; }
+    if ('amount' in req.body) m = await billMonth(db, m.client_id, m.year, m.month, req.body.amount);
+    if (!('status' in req.body)) return m;
+    const status = req.body.status === '' ? null : req.body.status;
+    if (![null, 'rec', 'not_rec', 'na'].includes(status)) { const e = new Error('x'); e.status = 400; e.msgOverride = 'Choose received, not received or N/A.'; throw e; }
+    if (m.status === status) return m;
+    if (m.status === 'rec' && m.tx_id) {
+      const tx = (await db.query('select * from transactions where id=$1', [m.tx_id])).rows[0];
+      await db.query('update retainer_months set tx_id=null where id=$1', [m.id]);
+      if (tx && tx.auto) await db.query('delete from transactions where id=$1', [tx.id]);
+    }
+    if (status === 'na' && m.charge_tx_id) m = await billMonth(db, m.client_id, m.year, m.month, 0); // no fee this month: remove the bill
+    let txId = null;
+    if (status === 'rec' && Number(m.amount) > 0) {
+      txId = (await db.query(
+        `insert into transactions (tx_date, type, client_id, amount, description, method, auto) values ($1, 'payment', $2, $3, $4, 'EFT', true) returning id`,
+        [todaySA(), m.client_id, m.amount, `Retainer ${monthLabel(m.year, m.month)}`])).rows[0].id;
+    }
+    return (await db.query('update retainer_months set status=$1, tx_id=$2 where id=$3 returning *', [status, txId, m.id])).rows[0];
+  });
+  res.json(out);
+}));
+
+// Monthly billing: list every active retainer for a month, with what was billed last time
+app.get('/api/admin/retainers/bill', wrap(async (req, res) => {
+  const y = Number(req.query.year), m = Number(req.query.month);
+  await ensureRetainerYear(pool, y);
+  const { rows } = await q(`
+    select c.id client_id, c.name, rm.id month_id, rm.status, rm.amount, rm.charge_tx_id,
+      (select p.amount from retainer_months p where p.client_id=c.id and p.amount > 0 and (p.year < $1 or (p.year = $1 and p.month < $2)) order by p.year desc, p.month desc limit 1) as last_amount
+    from clients c left join retainer_months rm on rm.client_id=c.id and rm.year=$1 and rm.month=$2
+    where c.billing='retainer' and c.retainer_active and (c.retainer_start is null or c.retainer_start <= make_date($1, $2, 1))
+      and coalesce(rm.status, '') <> 'na'
+    order by lower(c.name)`, [y, m]);
+  res.json(rows);
+}));
+app.post('/api/admin/retainers/bill', wrap(async (req, res) => {
+  const { year, month, items } = req.body || {};
+  if (!year || !month || !Array.isArray(items)) return res.status(400).json({ error: 'Choose a month and enter amounts.' });
+  const done = await inTx(async (db) => {
+    let n = 0, total = 0;
+    for (const it of items) {
+      if (it.amount === '' || it.amount == null) continue;
+      await billMonth(db, it.client_id, year, month, it.amount);
+      if (Number(it.amount) > 0) { n++; total += Number(it.amount); }
+    }
+    return { n, total };
+  });
+  res.json(done);
 }));
 
 // ---------- client statement ----------
 app.get('/api/admin/clients/:id/statement', wrap(async (req, res) => {
   const id = req.params.id;
-  const c = (await q('select * from clients where id=$1', [id])).rows[0];
+  await syncRetainers();
+  const c = (await q(`select c.*, ${BAL} as balance, b.charges, b.paid from clients c join client_balances b on b.client_id=c.id where c.id=$1`, [id])).rows[0];
   if (!c) return res.status(404).json({ error: 'That client no longer exists.' });
-  const [inv, pay, cr, con, ads] = await Promise.all([
-    q('select * from invoice_summary where client_id=$1 order by issue_date desc', [id]),
-    q('select p.*, i.number invoice_number from payments p left join invoices i on i.id=p.invoice_id where p.client_id=$1 order by paid_on desc', [id]),
-    q('select n.*, i.number invoice_number from credit_notes n left join invoices i on i.id=n.invoice_id where n.client_id=$1 order by issued_on desc', [id]),
+  const [tx, months, con] = await Promise.all([
+    q(`select t.*, ${MONTHS_FOR('tx_id')} months, ${MONTHS_FOR('charge_tx_id')} billed_for from transactions t where client_id=$1 order by tx_date desc, id desc`, [id]),
+    q('select * from retainer_months where client_id=$1 order by year desc, month', [id]),
     q('select * from contracts where client_id=$1 order by start_date desc nulls last', [id]),
-    q('select * from ad_spend where client_id=$1 order by month desc', [id]),
   ]);
-  const sum = (rows, k) => rows.reduce((a, r) => a + Number(r[k] || 0), 0);
-  const billed = sum(inv.rows.filter((r) => !['void', 'draft'].includes(r.status)), 'total');
-  const paid = sum(pay.rows, 'amount'), credited = sum(cr.rows, 'amount');
-  res.json({ client: c, invoices: inv.rows, payments: pay.rows, credits: cr.rows, contracts: con.rows, ad_spend: ads.rows,
-    totals: { billed, paid, credited, balance: billed - paid - credited } });
+  res.json({ client: c, transactions: tx.rows, months: months.rows, contracts: con.rows });
 }));
 
 // ---------- debtors ----------
 app.get('/api/admin/debtors', wrap(async (req, res) => {
+  await syncRetainers();
   const { rows } = await q(`
-    with open as (
-      select client_id, balance, days_overdue from invoice_summary
-      where status not in ('void','draft') and balance > 0
-    ),
-    unalloc as (
-      select client_id, sum(amount) amt from (
-        select client_id, amount from payments where invoice_id is null
-        union all select client_id, amount from credit_notes where invoice_id is null
-      ) x group by client_id
-    )
-    select c.id, c.name, c.phone, c.email,
-      coalesce(sum(o.balance) filter (where o.days_overdue = 0), 0)              as current,
-      coalesce(sum(o.balance) filter (where o.days_overdue between 1 and 30), 0) as d30,
-      coalesce(sum(o.balance) filter (where o.days_overdue between 31 and 60), 0) as d60,
-      coalesce(sum(o.balance) filter (where o.days_overdue between 61 and 90), 0) as d90,
-      coalesce(sum(o.balance) filter (where o.days_overdue > 90), 0)             as d90plus,
-      coalesce(max(u.amt), 0) as unallocated,
-      coalesce(sum(o.balance), 0) - coalesce(max(u.amt), 0) as balance,
-      count(o.*)::int as open_invoices
-    from clients c
-    left join open o on o.client_id = c.id
-    left join unalloc u on u.client_id = c.id
-    group by c.id
-    having coalesce(sum(o.balance), 0) <> 0 or coalesce(max(u.amt), 0) <> 0
-    order by balance desc`);
+    select c.id, c.name, c.phone, c.billing, c.retainer_active, ${BAL} as balance,
+      (select string_agg(to_char(make_date(m.year, m.month, 1), 'Mon YY'), ', ' order by m.year, m.month)
+         from retainer_months m where m.client_id=c.id and m.status='not_rec') as unpaid_months,
+      (select max(tx_date) from transactions t where t.client_id=c.id and t.type='payment') as last_paid
+    from clients c join client_balances b on b.client_id=c.id
+    where ${BAL} <> 0
+    order by ${BAL} desc`);
   res.json(rows);
 }));
 
 // ---------- dashboard ----------
 app.get('/api/admin/dashboard', wrap(async (req, res) => {
+  await syncRetainers();
   const one = async (sql) => Number((await q(sql)).rows[0].v || 0);
   const m = `date_trunc('month', current_date)`;
-  const [incomeMonth, incomeLast, expMonth, adMonth, adFeeMonth, outstanding, overdue, mrr, newLeads] = await Promise.all([
-    one(`select sum(amount) v from payments where paid_on >= ${m}`),
-    one(`select sum(amount) v from payments where paid_on >= ${m} - interval '1 month' and paid_on < ${m}`),
-    one(`select sum(amount) v from expenses where spent_on >= ${m}`),
-    one(`select sum(spend) v from ad_spend where month = ${m}::date`),
-    one(`select sum(fee) v from ad_spend where month = ${m}::date`),
-    one(`select (select coalesce(sum(balance),0) from invoice_summary where status not in ('void','draft') and balance > 0)
-               - (select coalesce(sum(amount),0) from payments where invoice_id is null)
-               - (select coalesce(sum(amount),0) from credit_notes where invoice_id is null) v`),
-    one(`select sum(balance) v from invoice_summary where pay_status = 'overdue'`),
-    one(`select sum(value) v from contracts where kind='retainer' and status='active' and (end_date is null or end_date >= current_date)`),
+  const [incomeMonth, incomeLast, billedMonth, outstanding, activeRet, unbilled, newLeads, notRecCount, notRecAmt] = await Promise.all([
+    one(`select sum(amount) v from transactions where type='payment' and tx_date >= ${m}`),
+    one(`select sum(amount) v from transactions where type='payment' and tx_date >= ${m} - interval '1 month' and tx_date < ${m}`),
+    one(`select sum(amount) v from transactions where type='charge' and tx_date >= ${m} and coalesce(description,'') not like 'Opening balance%'`),
+    one(`select sum(greatest(${BAL}, 0)) v from client_balances b`),
+    one(`select count(*) v from clients where billing='retainer' and retainer_active and (retainer_start is null or retainer_start <= current_date)`),
+    one(`select count(*) v from retainer_months m join clients c on c.id=m.client_id where c.retainer_active and c.billing='retainer' and m.status is null
+           and m.year=extract(year from current_date) and m.month=extract(month from current_date)`),
     one(`select count(*) v from leads where status = 'new'`),
+    one(`select count(*) v from retainer_months where status='not_rec' and amount > 0`),
+    one(`select sum(amount) v from retainer_months where status='not_rec' and amount > 0`),
   ]);
   const series = (await q(`
     with months as (select generate_series(${m} - interval '11 months', ${m}, interval '1 month')::date as month)
     select to_char(mo.month,'Mon YY') label, mo.month,
-      coalesce((select sum(amount) from payments where date_trunc('month', paid_on) = mo.month),0) income,
-      coalesce((select sum(amount) from expenses where date_trunc('month', spent_on) = mo.month),0) expenses,
-      coalesce((select sum(spend) from ad_spend where month = mo.month),0) ad_spend
+      coalesce((select sum(amount) from transactions where type='payment' and date_trunc('month', tx_date) = mo.month),0) income,
+      coalesce((select sum(amount) from transactions where type='charge' and coalesce(description,'') not like 'Opening balance%' and date_trunc('month', tx_date) = mo.month),0) billed
     from months mo order by mo.month`)).rows;
-  const topDebtors = (await q(`select client_id, client_name, sum(balance) balance, max(days_overdue) days
-    from invoice_summary where status not in ('void','draft') and balance > 0 group by client_id, client_name order by balance desc limit 5`)).rows;
+  const topDebtors = (await q(`select c.id client_id, c.name client_name, c.billing, ${BAL} balance from clients c join client_balances b on b.client_id=c.id
+    where ${BAL} > 0 order by ${BAL} desc limit 6`)).rows;
   const ending = (await q(`select k.id, k.title, k.end_date, k.value, k.kind, c.name client_name from contracts k join clients c on c.id=k.client_id
     where k.status='active' and k.end_date between current_date and current_date + 45 order by k.end_date`)).rows;
-  const recentPayments = (await q(`select p.amount, p.paid_on, p.method, c.name client_name, i.number invoice_number from payments p
-    join clients c on c.id=p.client_id left join invoices i on i.id=p.invoice_id order by p.paid_on desc, p.id desc limit 6`)).rows;
+  const recentPayments = (await q(`select t.amount, t.tx_date paid_on, t.method, t.description, c.name client_name from transactions t
+    join clients c on c.id=t.client_id where t.type='payment' order by t.tx_date desc, t.id desc limit 6`)).rows;
   res.json({
-    kpis: { incomeMonth, incomeLast, expMonth, profitMonth: incomeMonth - expMonth, adMonth, adFeeMonth, outstanding, overdue, mrr, newLeads },
+    kpis: { incomeMonth, incomeLast, billedMonth, outstanding, activeRet, unbilled, newLeads, notRecCount, notRecAmt },
     series, topDebtors, ending, recentPayments,
   });
 }));
