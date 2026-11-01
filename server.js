@@ -30,6 +30,7 @@ setInterval(() => q('select 1').catch((e) => console.error('[db] ping failed', e
 
 const app = express();
 app.set('trust proxy', 1);
+app.use('/api/admin/leads', express.json({ limit: '4mb' })); // proof screenshots
 app.use(express.json({ limit: '200kb' }));
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -153,23 +154,214 @@ function notifyLead(l) {
 // ---------- auth ----------
 app.post('/api/login', limiter(10, 15 * 60 * 1000), wrap(async (req, res) => {
   const pw = String((req.body || {}).password || '');
+  if (!pw) return res.status(401).json({ error: 'Type your password.' });
   let ok = false;
   if (process.env.ADMIN_PASSWORD_HASH) ok = await bcrypt.compare(pw, process.env.ADMIN_PASSWORD_HASH);
   else if (process.env.ADMIN_PASSWORD) {
     const a = Buffer.from(pw), b = Buffer.from(process.env.ADMIN_PASSWORD);
     ok = a.length === b.length && crypto.timingSafeEqual(a, b);
   }
-  if (!ok) return res.status(401).json({ error: 'That password is incorrect.' });
-  res.json({ token: jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '12h' }) });
+  if (ok) return res.json({ token: jwt.sign({ role: 'admin', name: 'Owner' }, JWT_SECRET, { expiresIn: '12h' }), role: 'admin', name: 'Owner' });
+  // not the owner: each salesperson has their own password, which tells us who they are
+  const u = await findUserByPassword(pw);
+  if (!u) return res.status(401).json({ error: 'That password is incorrect.' });
+  res.json({ token: jwt.sign({ role: u.role, uid: u.id, name: u.name }, JWT_SECRET, { expiresIn: '12h' }), role: u.role, name: u.name });
 }));
 
-function auth(req, res, next) {
+async function findUserByPassword(pw, activeOnly = true) {
+  let users = [];
+  try { users = (await q(`select * from app_users ${activeOnly ? 'where active' : ''}`)).rows; } catch { return null; } // table not created yet
+  for (const u of users) if (await bcrypt.compare(pw, u.password_hash)) return u;
+  return null;
+}
+async function isOwnerPassword(pw) {
+  if (process.env.ADMIN_PASSWORD_HASH) return bcrypt.compare(pw, process.env.ADMIN_PASSWORD_HASH);
+  return !!process.env.ADMIN_PASSWORD && pw === process.env.ADMIN_PASSWORD;
+}
+// Passwords must be unique, because the password is what identifies the person.
+async function checkNewPassword(pw, exceptId) {
+  if (pw.length < 6) throw badReq('Password must be at least 6 characters.');
+  if (await isOwnerPassword(pw)) throw badReq("That's your owner password. Choose a different one.");
+  const u = await findUserByPassword(pw, false);
+  if (u && String(u.id) !== String(exceptId)) throw badReq('Someone else already uses that password. Choose a different one.');
+}
+
+// Salespeople can only reach the leads routes, and can't delete anything.
+const SALES_OK = /^\/api\/admin\/(me|lead-stats|leads(\/\d+(\/(activity|contact))?)?|proofs\/\d+)$/;
+async function auth(req, res, next) {
   const h = req.headers.authorization || '';
-  const token = h.startsWith('Bearer ') ? h.slice(7) : null;
-  try { jwt.verify(token, JWT_SECRET); next(); }
-  catch { res.status(401).json({ error: 'Your session has ended. Log in again.' }); }
+  const path = req.originalUrl.split('?')[0];
+  let token = h.startsWith('Bearer ') ? h.slice(7) : null;
+  if (!token && req.query.t && path.startsWith('/api/admin/proofs/')) token = String(req.query.t); // proof images open in a new tab
+  try { req.user = jwt.verify(token, JWT_SECRET); }
+  catch { return res.status(401).json({ error: 'Your session has ended. Log in again.' }); }
+  if (req.user.role === 'admin') return next();
+  try {
+    const u = (await q('select active from app_users where id=$1', [req.user.uid])).rows[0];
+    if (!u || !u.active) return res.status(401).json({ error: 'Your login has been switched off. Speak to the owner.' });
+  } catch (e) { return res.status(500).json({ error: 'Something went wrong on the server.' }); }
+  if (!SALES_OK.test(path) || req.method === 'DELETE') return res.status(403).json({ error: 'You don\'t have access to that.' });
+  next();
 }
 app.use('/api/admin', auth);
+const isAdmin = (req) => req.user && req.user.role === 'admin';
+const who = (req) => ({ id: req.user.uid || null, name: req.user.name || 'Owner' });
+app.get('/api/admin/me', (req, res) => res.json({ role: req.user.role, name: req.user.name || 'Owner' }));
+
+// ---------- leads + activity log (owner and salespeople) ----------
+const LEAD_COLS = ['name', 'business', 'email', 'phone', 'services', 'message', 'status', 'budget', 'timeline', 'contact_pref'];
+const LEAD_STATUS = ['new', 'contacted', 'follow_up', 'quoted', 'won', 'lost'];
+const HOW = { call: 'Call', whatsapp: 'WhatsApp', email: 'Email', sms: 'SMS', meeting: 'Meeting', walk_in: 'Walk-in', other: 'Other' };
+const badReq = (msg) => { const e = new Error(msg); e.status = 400; e.msgOverride = msg; return e; };
+
+function parseProof(p) {
+  if (!p) return null;
+  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(p));
+  if (!m) throw badReq('The proof must be a photo or screenshot.');
+  const buf = Buffer.from(m[2], 'base64');
+  if (buf.length > 3e6) throw badReq('That picture is too big. Try a screenshot instead.');
+  return { mime: m[1], buf };
+}
+async function addActivity(db, leadId, u, kind, { how = null, note = null, status = null, proof = null } = {}) {
+  const a = (await db.query(
+    `insert into lead_activity (lead_id, user_id, user_name, kind, how, note, status_to) values ($1,$2,$3,$4,$5,$6,$7) returning *`,
+    [leadId, u.id, u.name, kind, how, note, status])).rows[0];
+  if (proof) await db.query('insert into lead_proofs (activity_id, mime, data) values ($1,$2,$3)', [a.id, proof.mime, proof.buf]);
+  await db.query('update leads set updated_at=now() where id=$1', [leadId]);
+  return a;
+}
+function leadBody(b, required) {
+  const v = {};
+  for (const c of LEAD_COLS) if (c in b) v[c] = toNull(typeof b[c] === 'string' ? b[c].trim() : b[c]);
+  if (required || 'name' in v) if (!v.name) throw badReq("Add the lead's name.");
+  if (required && !v.phone && !v.email) throw badReq('Add a phone number or email.');
+  if (v.status && !LEAD_STATUS.includes(v.status)) throw badReq('Choose a valid status.');
+  return v;
+}
+
+app.get('/api/admin/leads', wrap(async (req, res) => {
+  const { rows } = await q(`
+    select l.*, la.created_at as last_at, la.user_name as last_by, la.how as last_how,
+      (select count(*) from lead_activity x where x.lead_id=l.id and x.kind in ('created','contact'))::int as touches
+    from leads l
+    left join lateral (select created_at, user_name, how from lead_activity a where a.lead_id=l.id and a.kind in ('created','contact')
+                       order by created_at desc limit 1) la on true
+    order by l.created_at desc`);
+  res.json(rows);
+}));
+
+app.post('/api/admin/leads', wrap(async (req, res) => {
+  const b = req.body || {}, u = who(req);
+  const v = leadBody(b, true);
+  const proof = parseProof(b.proof);
+  if (!isAdmin(req) && !proof) throw badReq('Upload proof that you contacted this lead: a screenshot of the call log, WhatsApp chat or email.');
+  const how = HOW[b.how] ? b.how : null;
+  if (!isAdmin(req) && !how) throw badReq('Choose how you contacted them.');
+  v.status = v.status || (how ? 'contacted' : 'new');
+  const lead = await inTx(async (db) => {
+    const cols = [...Object.keys(v), 'created_by'], vals = [...Object.values(v), u.name];
+    const l = (await db.query(`insert into leads (${cols.join(',')}) values (${cols.map((_, i) => '$' + (i + 1)).join(',')}) returning *`, vals)).rows[0];
+    await addActivity(db, l.id, u, 'created', { how, note: toNull(b.note), status: l.status, proof });
+    return l;
+  });
+  res.json(lead);
+}));
+
+app.put('/api/admin/leads/:id', wrap(async (req, res) => {
+  const v = leadBody(req.body || {}, false);
+  if (!Object.keys(v).length) throw badReq('Nothing to save.');
+  const out = await inTx(async (db) => {
+    const old = (await db.query('select * from leads where id=$1 for update', [req.params.id])).rows[0];
+    if (!old) { const e = new Error('gone'); e.status = 404; throw e; }
+    const changed = Object.keys(v).filter((k) => String(old[k] ?? '') !== String(v[k] ?? ''));
+    if (!changed.length) return old;
+    const cols = Object.keys(v);
+    const l = (await db.query(`update leads set ${cols.map((c, i) => `${c}=$${i + 1}`).join(',')} where id=$${cols.length + 1} returning *`, [...Object.values(v), req.params.id])).rows[0];
+    await addActivity(db, l.id, who(req), 'edited', { note: 'Changed ' + changed.map((c) => c.replace('_', ' ')).join(', '), status: changed.includes('status') ? l.status : null });
+    return l;
+  });
+  res.json(out);
+}));
+
+app.delete('/api/admin/leads/:id', wrap(async (req, res) => {
+  await q('delete from leads where id=$1', [req.params.id]);
+  res.json({ ok: true });
+}));
+
+// log a contact: call / WhatsApp / email..., with proof
+app.post('/api/admin/leads/:id/contact', wrap(async (req, res) => {
+  const b = req.body || {}, u = who(req);
+  const how = HOW[b.how] ? b.how : null;
+  if (!how) throw badReq('Choose how you contacted them.');
+  const proof = parseProof(b.proof);
+  if (!isAdmin(req) && !proof) throw badReq('Upload proof: a screenshot of the call log, WhatsApp chat or email.');
+  const status = b.status && LEAD_STATUS.includes(b.status) ? b.status : null;
+  const out = await inTx(async (db) => {
+    const l = (await db.query('select * from leads where id=$1 for update', [req.params.id])).rows[0];
+    if (!l) { const e = new Error('gone'); e.status = 404; throw e; }
+    if (status && status !== l.status) await db.query('update leads set status=$1 where id=$2', [status, l.id]);
+    return addActivity(db, l.id, u, 'contact', { how, note: toNull(b.note), status: status && status !== l.status ? status : null, proof });
+  });
+  res.json(out);
+}));
+
+app.get('/api/admin/leads/:id/activity', wrap(async (req, res) => {
+  const { rows } = await q(`select a.*, (p.id is not null) as has_proof from lead_activity a left join lead_proofs p on p.activity_id=a.id
+    where a.lead_id=$1 order by a.created_at desc, a.id desc`, [req.params.id]);
+  res.json(rows);
+}));
+
+app.get('/api/admin/proofs/:activityId', wrap(async (req, res) => {
+  const p = (await q('select mime, data from lead_proofs where activity_id=$1', [req.params.activityId])).rows[0];
+  if (!p) return res.status(404).send('Not found');
+  res.set('Cache-Control', 'private, max-age=86400').type(p.mime).send(p.data);
+}));
+
+// how much each person did per day (SA time). Salespeople only see their own.
+app.get('/api/admin/lead-stats', wrap(async (req, res) => {
+  const mine = isAdmin(req) ? '' : 'and a.user_id = $1';
+  const params = isAdmin(req) ? [] : [req.user.uid];
+  const { rows } = await q(`
+    select to_char((a.created_at at time zone 'Africa/Johannesburg')::date, 'YYYY-MM-DD') as day, a.user_name,
+      count(*) filter (where a.kind in ('created','contact'))::int as contacts,
+      count(*) filter (where a.kind = 'created')::int as new_leads,
+      count(*) filter (where a.status_to = 'won')::int as won,
+      min(a.created_at) as first_at, max(a.created_at) as last_at
+    from lead_activity a
+    where a.created_at >= now() - interval '14 days' and a.kind in ('created','contact') ${mine}
+    group by 1, 2 order by 1 desc, 2`, params);
+  res.json(rows);
+}));
+
+// ---------- team logins (owner only) ----------
+app.get('/api/admin/users', wrap(async (req, res) => {
+  const { rows } = await q(`select u.id, u.name, u.username, u.role, u.active, u.created_at,
+      (select max(created_at) from lead_activity a where a.user_id=u.id) as last_at
+    from app_users u order by u.active desc, lower(u.name)`);
+  res.json(rows);
+}));
+app.post('/api/admin/users', wrap(async (req, res) => {
+  const b = req.body || {};
+  const name = String(b.name || '').trim(), pw = String(b.password || '');
+  if (!name) throw badReq('Add their name.');
+  await checkNewPassword(pw);
+  const username = (name.toLowerCase().replace(/[^a-z0-9]+/g, '.') || 'user') + '.' + crypto.randomBytes(3).toString('hex'); // internal only
+  try {
+    const u = (await q(`insert into app_users (name, username, password_hash) values ($1,$2,$3) returning id, name, username, active`, [name, username, await bcrypt.hash(pw, 10)])).rows[0];
+    res.json(u);
+  } catch (e) { if (e.code === '23505') throw badReq('Try again.'); throw e; }
+}));
+app.put('/api/admin/users/:id', wrap(async (req, res) => {
+  const b = req.body || {}, sets = [], vals = [];
+  if (typeof b.name === 'string' && b.name.trim()) { vals.push(b.name.trim()); sets.push(`name=$${vals.length}`); }
+  if (typeof b.active === 'boolean') { vals.push(b.active); sets.push(`active=$${vals.length}`); }
+  if (b.password) { await checkNewPassword(String(b.password), req.params.id); vals.push(await bcrypt.hash(String(b.password), 10)); sets.push(`password_hash=$${vals.length}`); }
+  if (!sets.length) throw badReq('Nothing to save.');
+  vals.push(req.params.id);
+  const u = (await q(`update app_users set ${sets.join(',')} where id=$${vals.length} returning id, name, username, active`, vals)).rows[0];
+  if (!u) { const e = new Error('gone'); e.status = 404; throw e; }
+  res.json(u);
+}));
 
 // ---------- generic CRUD ----------
 const toNull = (v) => (v === '' || v === undefined ? null : v);
@@ -180,10 +372,6 @@ const resources = {
   contracts: {
     cols: ['client_id', 'title', 'kind', 'value', 'start_date', 'end_date', 'status', 'file_url', 'notes'],
     list: `select t.*, c.name client_name from contracts t join clients c on c.id=t.client_id order by t.status='active' desc, t.end_date nulls last, t.id desc`,
-  },
-  leads: {
-    cols: ['name', 'business', 'email', 'phone', 'services', 'message', 'status', 'budget', 'timeline', 'contact_pref'],
-    list: `select * from leads order by created_at desc`,
   },
 };
 
