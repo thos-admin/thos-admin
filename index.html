@@ -1048,7 +1048,7 @@ async function billModal(year, month, after) {
 async function debtorsView() {
   const main = $('#main');
   main.innerHTML = `<div class="page-head"><div><h1>Debtors</h1><p class="sub">Who owes you. Recording a payment reduces it straight away.</p></div><div class="actions"><button class="btn primary" data-pay>Record payment</button></div></div><div class="stat-grid"></div>
-    <div class="toolbar"><input type="search" placeholder="Search clients" aria-label="Search"><select data-type aria-label="Type"><option value="">All debtors</option><option value="retainer">Retainer clients</option><option value="once_off">Once-off clients</option><option value="credit">In credit</option></select><span class="count"></span></div>
+    <div class="toolbar"><input type="search" placeholder="Search clients" aria-label="Search"><select data-type aria-label="Type"><option value="">All debtors</option><option value="retainer">Retainer clients</option><option value="once_off">Once-off clients</option><option value="credit">In credit</option><option value="paid">Paid up (R0)</option></select><span class="count"></span></div>
     <div class="card table-wrap"><p class="empty">Loading…</p></div>`;
   $('[data-pay]', main).onclick = () => editRecord(CFG.transactions, {}, { type: 'payment' });
   const all = await A('/debtors');
@@ -1070,10 +1070,11 @@ async function debtorsView() {
     const qv = $('input', tb).value.trim().toLowerCase(), ty = $('[data-type]', tb).value;
     main.querySelectorAll('.kpi.pick').forEach(c => c.classList.toggle('on', c.dataset.f === ty));
     const rows = all.filter(r => (!qv || r.name.toLowerCase().includes(qv))
-      && (!ty || (ty === 'credit' ? num(r.balance) < 0 : num(r.balance) > 0 && (ty === 'retainer' ? r.billing === 'retainer' : r.billing !== 'retainer'))));
-    $('.count', tb).textContent = `${rows.length} of ${all.length}`;
+      && (ty === 'paid' ? num(r.balance) === 0 : num(r.balance) !== 0)
+      && (!ty || ty === 'paid' || (ty === 'credit' ? num(r.balance) < 0 : num(r.balance) > 0 && (ty === 'retainer' ? r.billing === 'retainer' : r.billing !== 'retainer'))));
+    $('.count', tb).textContent = ty === 'paid' ? `${rows.length} paid up` : `${rows.length} owing`;
     const card = $('.card.table-wrap', main);
-    if (!rows.length) { card.innerHTML = '<p class="empty">Nobody here owes you anything.</p>'; return; }
+    if (!rows.length) { card.innerHTML = `<p class="empty">${ty === 'paid' ? 'No paid-up clients yet.' : 'Nobody here owes you anything.'}</p>`; return; }
     card.innerHTML = `<table class="t"><thead><tr><th>Client</th><th>Unpaid months</th><th>Last payment</th><th class="money">Total owed</th><th></th></tr></thead>
       <tbody>${rows.map(r => {
         const wa = waNum(r.phone);
