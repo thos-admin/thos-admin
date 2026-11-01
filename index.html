@@ -118,6 +118,11 @@ table.t{width:100%;border-collapse:collapse;font-size:14px}
 .kpi .k-val{font-size:26px;font-weight:700;letter-spacing:-.01em;margin-top:4px;font-variant-numeric:tabular-nums;line-height:1.15}
 .kpi .k-note{font-size:13px;color:var(--muted);margin-top:4px}
 .kpi.alert .k-val{color:var(--bad)}
+button.kpi.pick{text-align:left;font:inherit;color:inherit;cursor:pointer;width:100%;transition:border-color .15s,box-shadow .15s}
+button.kpi.pick:hover{border-color:var(--line-2);box-shadow:0 6px 18px -10px rgba(11,19,32,.35)}
+button.kpi.pick.on{border-color:var(--night);box-shadow:inset 0 0 0 1px var(--night)}
+button.kpi.pick .go{color:var(--info);opacity:0;transition:opacity .15s}
+button.kpi.pick:hover .go,button.kpi.pick.on .go{opacity:1}
 a.kpi{text-decoration:none;color:inherit;display:block}
 a.kpi:hover{border-color:var(--line-2)}
 .dash-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:14px}
@@ -218,7 +223,30 @@ a.kpi:hover{border-color:var(--line-2)}
 .ystrip .ml{font-size:11px;color:var(--muted);text-align:center}
 .tx-in{color:var(--good)} .tx-out{color:var(--bad)}
 .m-only{display:none}
-@media (max-width:700px){ table.t.bank{min-width:0;width:100%} .t.bank td:last-child{white-space:nowrap} .t.bank .d-only{display:none} .t.bank .m-only{display:block} }
+body.sales .side .nav:not([data-v=leads]), body.sales .side-group, body.sales .side-foot .own{display:none}
+.side-foot .who{display:block;font-size:12px;color:#8a94a8;margin-bottom:6px}
+.lead-head{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-bottom:16px}
+.lead-head .card{padding:14px 16px}
+.lead-head .big{font-size:26px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.lead-head .sm{font-size:13px;color:var(--muted);margin-top:3px}
+.days{width:100%;border-collapse:collapse;font-size:13px}
+.days th,.days td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.days th:first-child,.days td:first-child{text-align:left}
+.days th{color:var(--muted);font-weight:600}
+.tl{list-style:none;margin:0;padding:0}
+.tl li{display:grid;grid-template-columns:1fr auto;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
+.tl li:last-child{border-bottom:0}
+.tl .t1{font-weight:600}
+.tl .t2{font-size:13px;color:var(--muted);margin-top:2px}
+.tl .note{margin-top:6px;white-space:pre-wrap;font-size:14px}
+.tl img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block}
+.proof-drop{border:1.5px dashed var(--line-2);border-radius:10px;padding:14px;text-align:center;cursor:pointer;color:var(--muted);font-size:14px;display:block}
+.proof-drop:hover{border-color:var(--night);color:var(--ink)}
+.proof-drop img{max-height:160px;max-width:100%;border-radius:8px;display:block;margin:0 auto 8px}
+.proof-drop input{display:none}
+.lead-info{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px 18px;font-size:14px;margin-bottom:14px}
+.lead-info b{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:2px}
+@media (max-width:700px){ .toolbar input[type=search]{flex-basis:100%} table.t.bank{min-width:0;width:100%} .t.bank td:last-child{white-space:nowrap} .t.bank .d-only{display:none} .t.bank .m-only{display:block} }
 @media (max-width:1100px){ .kpis,.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))} .dash-grid{grid-template-columns:1fr} }
 @media (max-width:860px){
   .app{grid-template-columns:1fr}
@@ -244,7 +272,7 @@ a.kpi:hover{border-color:var(--line-2)}
     <img class="brand-logo" src="https://cdn.shopify.com/s/files/1/0613/0515/9770/files/Untitled_design_13.png?v=1723892185" alt="The House of Services" onload="this.parentElement.classList.add('has-logo')" onerror="this.remove()">
     <span class="logo-fallback"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 30 32 9l24 21v25H8z" fill="none" stroke="#FFC629" stroke-width="5" stroke-linejoin="round"/><rect x="26" y="34" width="12" height="12" fill="#FFC629"/></svg></span>
     <h1>Admin</h1>
-    <p>Log in to manage clients, retainers and payments.</p>
+    <p>Log in to manage clients, leads and payments.</p>
     <label for="pw" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:#c5cddc">Password</label>
     <input id="pw" type="password" autocomplete="current-password" required autofocus>
     <p class="err" id="loginErr" role="alert"></p>
@@ -267,7 +295,8 @@ a.kpi:hover{border-color:var(--line-2)}
     <div class="side-group">Account</div>
     <a class="nav" href="#settings" data-v="settings">Settings</a>
     <div class="side-foot">
-      <a href="/" target="_blank" rel="noopener">View website</a>
+      <span class="who" id="whoAmI"></span>
+      <a href="/" target="_blank" rel="noopener" class="own">View website</a>
       <button id="logout">Log out</button>
     </div>
   </aside>
@@ -298,11 +327,13 @@ const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDa
 const waNum = (p) => { let d = String(p || '').replace(/\D/g, ''); if (d.startsWith('0')) d = '27' + d.slice(1); return d; };
 const PILL = {
   active:'good', paid:'good', won:'good', completed:'mute', ended:'mute', cancelled:'mute', void:'mute', lost:'mute', draft:'mute',
-  paused:'warn', partial:'warn', quoted:'info', contacted:'info', unpaid:'info', sent:'info', new:'warn', overdue:'bad', retainer:'info', project:'mute',
+  paused:'warn', partial:'warn', follow_up:'warn', quoted:'info', contacted:'info', unpaid:'info', sent:'info', new:'warn', overdue:'bad', retainer:'info', project:'mute',
 };
-const pill = (s) => s ? `<span class="pill ${PILL[s] || 'mute'}">${esc(s[0].toUpperCase() + s.slice(1))}</span>` : '';
+const pill = (s) => s ? `<span class="pill ${PILL[s] || 'mute'}">${esc(s[0].toUpperCase() + s.slice(1).replace(/_/g, ' '))}</span>` : '';
 
 let token = localStorage.getItem('thos_token');
+let ME = null;               // { role: 'admin' | 'sales', name }
+const isOwner = () => !!ME && ME.role === 'admin';
 const cache = {};
 
 async function api(path, opts = {}) {
@@ -332,7 +363,7 @@ function showLogin(msg) {
   $('#loginErr').textContent = msg || '';
   setTimeout(() => $('#pw').focus(), 50);
 }
-function logout(msg) { token = null; localStorage.removeItem('thos_token'); showLogin(msg); }
+function logout(msg) { token = null; ME = null; localStorage.removeItem('thos_token'); document.body.classList.remove('sales'); showLogin(msg); }
 $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = e.target.querySelector('button'); btn.disabled = true;
@@ -431,7 +462,7 @@ async function editRecord(cfg, rec = {}, presets = {}) {
   form.innerHTML = (await Promise.all(cfg.fields.map(f => fieldHTML(f, vals[f.k])))).join('') + '<p class="form-err full" hidden></p>';
   const foot = document.createElement('div');
   foot.style.cssText = 'display:contents';
-  foot.innerHTML = `${!isNew ? '<button class="btn danger" type="button" data-del>Delete</button>' : ''}<div class="right"><button class="btn" type="button" data-cancel>Cancel</button><button class="btn primary" type="button" data-save>${isNew ? 'Add ' + cfg.one : 'Save changes'}</button></div>`;
+  foot.innerHTML = `${!isNew && (!cfg.noDelete || !cfg.noDelete()) ? '<button class="btn danger" type="button" data-del>Delete</button>' : ''}<div class="right"><button class="btn" type="button" data-cancel>Cancel</button><button class="btn primary" type="button" data-save>${isNew ? 'Add ' + cfg.one : 'Save changes'}</button></div>`;
   const m = modal({ title: cfg.title_ ? cfg.title_(isNew, vals) : (isNew ? 'Add ' : 'Edit ') + cfg.one, body: form, foot });
   await wireLinkedSelects(form);
   if (cfg.onForm) cfg.onForm(form, rec, m);
@@ -482,6 +513,10 @@ const TX_PILL = { payment: ['good','In'], expense: ['mute','Out'], charge: ['war
 const txPill = (t) => `<span class="pill ${TX_PILL[t][0]}">${TX_PILL[t][1]}</span>`;
 const showField = (form, k, on) => { const el = form.elements[k]; if (el) el.closest('.f').hidden = !on; };
 
+const LEAD_STATUSES = ['new','contacted','follow_up','quoted','won','lost'];
+const LEAD_LABEL = { new: 'New', contacted: 'Contacted', follow_up: 'Follow up', quoted: 'Quoted', won: 'Won', lost: 'Lost' };
+const HOW_OPTS = [['call','Phone call'],['whatsapp','WhatsApp'],['email','Email'],['sms','SMS'],['meeting','Meeting'],['walk_in','Walk-in'],['other','Other']];
+const HOW_LABEL = { call: 'Call', whatsapp: 'WhatsApp', email: 'Email', sms: 'SMS', meeting: 'Meeting', walk_in: 'Walk-in', other: 'Other', created: 'Added' };
 const CFG = {
   clients: {
     title: 'Clients', one: 'client', ep: 'clients', sub: 'Everyone you work with. Retainers can be switched between active and cancelled right here.',
@@ -586,50 +621,28 @@ const CFG = {
     ],
   },
   leads: {
-    title: 'Leads', one: 'lead', ep: 'leads', sub: 'Quote requests and enquiries from the website. Open one to see everything they asked for.',
-    search: ['name','business','email','phone','services','message','budget'], statusKey: 'status', statuses: ['new','contacted','quoted','won','lost'], dateKey: 'created_at',
+    title: 'Leads', one: 'lead', ep: 'leads', sub: 'Every lead, who contacted them and when. Open one to log a call or WhatsApp with proof.',
+    search: ['name','business','email','phone','services','message','created_by','last_by'], statusKey: 'status', statuses: LEAD_STATUSES, dateKey: 'created_at', tableCls: 'bank',
     cols: [
-      { l: 'Received', r: l => dt(l.created_at) },
-      { l: 'Name', r: l => `<strong>${esc(l.name)}</strong>${l.business ? `<div class="muted" style="font-size:13px">${esc(l.business)}</div>` : ''}` },
-      { l: 'Contact', r: l => [l.phone, l.email].filter(Boolean).map(esc).join('<br>') },
-      { l: 'Interested in', r: l => esc(l.services || '') + (l.details ? ' <span class="pill info">Quote request</span>' : '') },
-      { l: 'Budget', r: l => esc(l.budget || '') + (l.timeline ? `<div class="muted" style="font-size:13px">${esc(l.timeline)}</div>` : '') },
+      { l: 'Added', tcls: 'd-only', r: l => `${dt(l.created_at)}<div class="muted" style="font-size:12px">${l.created_by ? 'by ' + esc(l.created_by) : 'Website'}</div>` },
+      { l: 'Name', r: l => `<strong>${esc(l.name)}</strong>${l.business ? `<div class="muted" style="font-size:13px">${esc(l.business)}</div>` : ''}<div class="m-only muted" style="font-size:12px">${esc(l.phone || l.email || '')}${l.last_at ? ` · last ${dtt(l.last_at)}` : ' · not contacted'}</div>` },
+      { l: 'Contact', tcls: 'd-only', r: l => [l.phone, l.email].filter(Boolean).map(esc).join('<br>') },
+      { l: 'Interested in', tcls: 'd-only', r: l => esc(l.services || '') + (l.details ? ' <span class="pill info">Quote request</span>' : '') },
+      { l: 'Last contact', tcls: 'd-only', r: l => l.last_at ? `${dtt(l.last_at)}<div class="muted" style="font-size:12px">${esc(HOW_LABEL[l.last_how] || 'Added')} · ${esc(l.last_by)}${l.touches > 1 ? ` · ${l.touches}×` : ''}</div>` : '<span class="muted">Not contacted</span>' },
       { l: 'Status', r: l => pill(l.status) },
     ],
     fields: [
       { k: 'name', l: 'Name', req: true }, { k: 'business', l: 'Business' },
       { k: 'phone', l: 'Phone', t: 'tel' }, { k: 'email', l: 'Email', t: 'email' },
       { k: 'services', l: 'Interested in', full: true },
-      { k: 'status', l: 'Status', t: 'select', opts: ['new','contacted','quoted','won','lost'], def: 'new', full: true },
-      { k: 'message', l: 'Message', t: 'textarea' },
+      { k: 'status', l: 'Status', t: 'select', opts: LEAD_STATUSES.map(x => [x, LEAD_LABEL[x]]), def: 'new', full: true },
+      { k: 'message', l: 'Notes', t: 'textarea' },
     ],
-    onForm(form, lead, m) {
-      if (!lead.id) return;
-      const bar = document.createElement('div');
-      bar.className = 'full actions';
-      const wa = waNum(lead.phone);
-      bar.innerHTML = `${wa ? `<a class="btn sm" target="_blank" rel="noopener" href="https://wa.me/${wa}?text=${encodeURIComponent(`Hi ${lead.name}, thanks for contacting The House of Services. `)}">WhatsApp ${esc(lead.name.split(' ')[0])}</a>` : ''}
-        ${lead.email ? `<a class="btn sm" href="mailto:${esc(lead.email)}?subject=${encodeURIComponent('Your enquiry with The House of Services')}">Email</a>` : ''}
-        <button class="btn sm lamp" type="button" data-convert>Make client</button>`;
-      form.prepend(bar);
-      const ref = 'Q-' + String(lead.id).padStart(4, '0');
-      const det = typeof lead.details === 'string' ? JSON.parse(lead.details || 'null') : lead.details;
-      const box = document.createElement('div');
-      box.className = 'full';
-      box.innerHTML = `<div style="background:var(--bg);border-radius:10px;padding:14px 16px;font-size:14px">
-        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:${det ? 10 : 0}px"><b>${ref}</b>
-        <span class="muted">${[lead.budget && 'Budget: ' + esc(lead.budget), lead.timeline && esc(lead.timeline), lead.contact_pref && 'Prefers ' + esc(lead.contact_pref)].filter(Boolean).join(' · ')}</span></div>
-        ${det ? Object.entries(det).map(([svc, ans]) => `<div style="margin-top:8px"><b>${esc(svc)}</b>${Object.keys(ans || {}).length ? `<ul style="margin:4px 0 0 18px">${Object.entries(ans).map(([q, a]) => `<li><span class="muted">${esc(q.replace(/\?$/, ""))}:</span> ${esc(Array.isArray(a) ? a.join(', ') : a)}</li>`).join('')}</ul>` : '<div class="muted">No details given</div>'}</div>`).join('') : ''}
-      </div>`;
-      bar.after(box);
-      $('[data-convert]', bar).addEventListener('click', async () => {
-        try {
-          const c = await A('/clients', { method: 'POST', body: { name: lead.business || lead.name, contact_person: lead.name, email: lead.email, phone: lead.phone, notes: [lead.services, lead.message].filter(Boolean).join('\n\n') } });
-          await A('/leads/' + lead.id, { method: 'PUT', body: { status: 'won' } });
-          m.close(); bust(); refreshLeadBadge(); toast('Client created from lead'); location.hash = 'client/' + c.id;
-        } catch (e) { toast(e.message, true); }
-      });
-    },
+    title_: (isNew) => isNew ? 'Add lead' : 'Edit lead details',
+    noDelete: () => !isOwner(),
+    add: () => newLeadModal(),
+    head: (el) => leadsHead(el),
+    open: (l) => leadView(l.id),
   },
 };
 
@@ -639,16 +652,17 @@ async function listView(cfg) {
   main.innerHTML = `<div class="page-head"><div><h1>${cfg.title}</h1><p class="sub">${cfg.sub}</p></div><div class="actions"><button class="btn primary" data-add>Add ${cfg.one}</button></div></div>
     <div class="toolbar">
       <input type="search" placeholder="Search ${cfg.title.toLowerCase()}" aria-label="Search">
-      ${cfg.statusKey ? `<select data-status aria-label="Filter by status"><option value="">All statuses</option>${cfg.statuses.map(s => `<option value="${s}">${cap(s)}</option>`).join('')}</select>` : ''}
+      ${cfg.statusKey ? `<select data-status aria-label="Filter by status"><option value="">All statuses</option>${cfg.statuses.map(s => `<option value="${s}">${cap(s).replace(/_/g, ' ')}</option>`).join('')}</select>` : ''}
       ${cfg.filterKey ? `<select data-filter aria-label="Filter"><option value="">All categories</option>${cfg.filters.map(s => `<option>${esc(s)}</option>`).join('')}</select>` : ''}
       ${(cfg.selects || []).map((f, i) => `<select data-sel="${i}" aria-label="Filter"><option value="">${f.all}</option>${f.opts.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}</select>`).join('')}
       ${cfg.dateKey ? `<select data-period aria-label="Period"></select>` : ''}
       <span class="count"></span>
     </div>
     <div class="card table-wrap"><p class="empty">Loading…</p></div>`;
-  $('[data-add]', main).addEventListener('click', () => editRecord(cfg, {}, cfg.addPreset ? cfg.addPreset($('[data-sel="0"]', main)?.value || '') : {}));
+  $('[data-add]', main).addEventListener('click', () => cfg.add ? cfg.add() : editRecord(cfg, {}, cfg.addPreset ? cfg.addPreset($('[data-sel="0"]', main)?.value || '') : {}));
+  if (cfg.head) { const hd = document.createElement('div'); $('.toolbar', main).before(hd); cfg.head(hd); }
   let rows;
-  try { rows = await A('/' + cfg.ep); } catch (e) { $('.card', main).innerHTML = `<p class="empty">${esc(e.message)}</p>`; return; }
+  try { rows = await A('/' + cfg.ep); } catch (e) { $('.card.table-wrap', main).innerHTML = `<p class="empty">${esc(e.message)}</p>`; return; }
   if (cfg.ep === 'clients') cache.clients = rows;
   if (cfg.prep) cfg.prep(rows);
   const tb = $('.toolbar', main);
@@ -668,8 +682,8 @@ async function listView(cfg) {
       && (!st || r[cfg.statusKey] === st) && (!fl || r[cfg.filterKey] === fl) && sels.every(([k, v], i) => !v || (cfg.selects[i].match ? cfg.selects[i].match(r, v) : r[k] === v))
       && (!cfg.dateKey || (/^y\d{4}$/.test(pr) ? String(r[cfg.dateKey]).startsWith(pr.slice(1)) : inPeriod(r[cfg.dateKey], pr))));
     $('.count', tb).textContent = `${list.length} of ${rows.length}`;
-    const card = $('.card', main);
-    if (!rows.length) { card.innerHTML = `<div class="empty">No ${cfg.title.toLowerCase()} yet.<br><button class="btn primary" data-add2>Add your first ${cfg.one}</button></div>`; $('[data-add2]', card).onclick = () => editRecord(cfg); return; }
+    const card = $('.card.table-wrap', main);
+    if (!rows.length) { card.innerHTML = `<div class="empty">No ${cfg.title.toLowerCase()} yet.<br><button class="btn primary" data-add2>Add your first ${cfg.one}</button></div>`; $('[data-add2]', card).onclick = () => cfg.add ? cfg.add() : editRecord(cfg); return; }
     if (!list.length) { card.innerHTML = `<p class="empty">Nothing matches these filters. Clear the search or pick another period.</p>`; return; }
     const sums = cfg.cols.map(c => c.sum ? list.reduce((a, r) => a + num(r[c.sum]), 0) : null);
     const hasSum = sums.some(s => s !== null);
@@ -686,6 +700,204 @@ async function listView(cfg) {
   };
   tb.addEventListener('input', draw); tb.addEventListener('change', draw);
   draw();
+}
+
+/* ================= leads: contact log with proof ================= */
+const TZ = 'Africa/Johannesburg';
+const dtt = (iso) => { if (!iso) return '–'; const d = new Date(iso); return d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', timeZone: TZ }) + ', ' + d.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ }); };
+const hm = (iso) => new Date(iso).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
+const todaySA = () => new Date().toLocaleDateString('en-CA', { timeZone: TZ });
+const proofUrl = (activityId) => `/api/admin/proofs/${activityId}?t=${encodeURIComponent(token)}`;
+
+// Shrink photos/screenshots before upload so they're quick to send and cheap to store.
+function readProof(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) return resolve(null);
+    if (!/^image\//.test(file.type)) return reject(new Error('Upload a photo or screenshot (JPG or PNG).'));
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const max = 1400, k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', 0.72));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("That picture couldn't be opened. Try a screenshot.")); };
+    img.src = url;
+  });
+}
+function proofField(required) {
+  return `<div class="f full"><label>Proof${required ? '' : ' <span style="font-weight:400;color:var(--muted)">(optional for you)</span>'}</label>
+    <label class="proof-drop" data-drop><input type="file" accept="image/*" data-proof><span data-ph>📎 Tap to add a screenshot of the call log, WhatsApp chat or email</span></label></div>`;
+}
+function wireProof(form) {
+  const inp = $('[data-proof]', form), drop = $('[data-drop]', form); let data = null;
+  inp.addEventListener('change', async () => {
+    try { data = await readProof(inp.files[0]); const er = $('.form-err', form); if (er && data) er.hidden = true; drop.querySelector('[data-ph]').innerHTML = data ? `<img src="${data}" alt="Proof preview">Tap to change` : '📎 Tap to add a screenshot'; }
+    catch (e) { data = null; toast(e.message, true); }
+  });
+  return () => data;
+}
+
+async function leadsHead(el) {
+  let rows;
+  try { rows = await A('/lead-stats'); } catch { return; }
+  const today = todaySA();
+  const people = [...new Set(rows.map(r => r.user_name))];
+  const t = rows.filter(r => r.day === today);
+  const days = [...new Set(rows.map(r => r.day))].sort().reverse().slice(0, 7);
+  const cell = (d, p) => { const r = rows.find(x => x.day === d && x.user_name === p); return r ? `${r.contacts}${r.new_leads ? ` <span class="muted">(${r.new_leads} new)</span>` : ''}` : '<span class="muted">–</span>'; };
+  const fmtDay = (d) => d === today ? 'Today' : new Date(d + 'T12:00:00').toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' });
+  if (!isOwner()) {
+    const me = t[0] || { contacts: 0, new_leads: 0 };
+    const week = rows.filter(r => days.includes(r.day)).reduce((a, r) => a + r.contacts, 0);
+    el.innerHTML = `<div class="lead-head">
+      <div class="card"><div class="sm" style="margin:0 0 4px">Your contacts today</div><div class="big">${me.contacts}</div><div class="sm">${me.new_leads} new lead${me.new_leads === 1 ? '' : 's'}${me.first_at ? ` · ${hm(me.first_at)} to ${hm(me.last_at)}` : ''}</div></div>
+      <div class="card"><div class="sm" style="margin:0 0 4px">Last 7 days</div><div class="big">${week}</div><div class="sm">contacts logged</div></div></div>`;
+    return;
+  }
+  if (!people.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="lead-head">${people.map(p => { const r = t.find(x => x.user_name === p) || { contacts: 0, new_leads: 0 };
+      return `<div class="card"><div class="sm" style="margin:0 0 4px">${esc(p)} · today</div><div class="big">${r.contacts} <span style="font-size:14px;font-weight:500;color:var(--muted)">contacts</span></div>
+        <div class="sm">${r.new_leads} new lead${r.new_leads === 1 ? '' : 's'}${r.first_at ? ` · first ${hm(r.first_at)}, last ${hm(r.last_at)}` : ' · nothing yet'}</div></div>`; }).join('')}</div>
+    <div class="card" style="padding:12px 16px;margin-bottom:16px;overflow-x:auto"><table class="days"><thead><tr><th>Contacts per day</th>${people.map(p => `<th>${esc(p)}</th>`).join('')}</tr></thead>
+      <tbody>${days.map(d => `<tr><td>${fmtDay(d)}</td>${people.map(p => `<td>${cell(d, p)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
+async function newLeadModal() {
+  const need = !isOwner();
+  const form = document.createElement('form'); form.className = 'fgrid'; form.noValidate = true;
+  form.innerHTML = `
+    <div class="f"><label for="nl_name">Name</label><input id="nl_name" name="name" required></div>
+    <div class="f"><label for="nl_bus">Business <span style="font-weight:400;color:var(--muted)">(optional)</span></label><input id="nl_bus" name="business"></div>
+    <div class="f"><label for="nl_ph">Phone</label><input id="nl_ph" name="phone" type="tel"></div>
+    <div class="f"><label for="nl_em">Email <span style="font-weight:400;color:var(--muted)">(optional)</span></label><input id="nl_em" name="email" type="email"></div>
+    <div class="f full"><label for="nl_sv">Interested in <span style="font-weight:400;color:var(--muted)">(optional)</span></label><input id="nl_sv" name="services" placeholder="For example: website, signage, social media"></div>
+    <div class="f"><label for="nl_how">How did you contact them?</label><select id="nl_how" name="how">${need ? '' : '<option value="">Not contacted yet</option>'}${HOW_OPTS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
+    <div class="f"><label for="nl_st">Status</label><select id="nl_st" name="status">${LEAD_STATUSES.map(x => `<option value="${x}"${x === 'contacted' ? ' selected' : ''}>${LEAD_LABEL[x]}</option>`).join('')}</select></div>
+    <div class="f full"><label for="nl_note">What happened? <span style="font-weight:400;color:var(--muted)">(optional)</span></label><textarea id="nl_note" name="note" placeholder="For example: Interested in a website, call back Friday"></textarea></div>
+    ${proofField(need)}<p class="form-err full" hidden></p>`;
+  const foot = document.createElement('div'); foot.style.cssText = 'display:contents';
+  foot.innerHTML = `<div class="right"><button class="btn" type="button" data-cancel>Cancel</button><button class="btn primary" type="button" data-save>Add lead</button></div>`;
+  const m = modal({ title: 'Add lead', body: form, foot });
+  const getProof = wireProof(form), err = $('.form-err', form);
+  $('[data-cancel]', m.el).onclick = m.close;
+  const save = async () => {
+    const f = form.elements, body = { name: f.name.value, business: f.business.value, phone: f.phone.value, email: f.email.value, services: f.services.value, how: f.how.value, status: f.status.value, note: f.note.value, proof: getProof() };
+    if (!body.name.trim()) { err.hidden = false; err.textContent = "Add the lead's name."; return; }
+    if (!body.phone.trim() && !body.email.trim()) { err.hidden = false; err.textContent = 'Add a phone number or email.'; return; }
+    if (need && !body.proof) { err.hidden = false; err.textContent = 'Add proof that you contacted them before saving.'; return; }
+    if (!body.how) body.status = body.status === 'contacted' ? 'new' : body.status;
+    const btn = $('[data-save]', m.el); btn.disabled = true; btn.textContent = 'Saving…';
+    try { await A('/leads', { method: 'POST', body }); m.close(); toast('Lead added'); refreshLeadBadge(); route(); }
+    catch (e) { err.hidden = false; err.textContent = e.message; btn.disabled = false; btn.textContent = 'Add lead'; }
+  };
+  $('[data-save]', m.el).onclick = save;
+  form.addEventListener('submit', (e) => { e.preventDefault(); save(); });
+}
+
+function logContactModal(lead, after) {
+  const need = !isOwner();
+  const form = document.createElement('form'); form.className = 'fgrid'; form.noValidate = true;
+  form.innerHTML = `
+    <div class="f"><label for="lc_how">How did you contact them?</label><select id="lc_how" name="how">${HOW_OPTS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
+    <div class="f"><label for="lc_st">Status now</label><select id="lc_st" name="status">${LEAD_STATUSES.map(x => `<option value="${x}"${x === (lead.status === 'new' ? 'contacted' : lead.status) ? ' selected' : ''}>${LEAD_LABEL[x]}</option>`).join('')}</select></div>
+    <div class="f full"><label for="lc_note">What happened? <span style="font-weight:400;color:var(--muted)">(optional)</span></label><textarea id="lc_note" name="note" placeholder="For example: No answer, sent WhatsApp. Wants a quote for a website."></textarea></div>
+    ${proofField(need)}<p class="form-err full" hidden></p>`;
+  const foot = document.createElement('div'); foot.style.cssText = 'display:contents';
+  foot.innerHTML = `<div class="right"><button class="btn" type="button" data-cancel>Cancel</button><button class="btn primary" type="button" data-save>Save contact</button></div>`;
+  const m = modal({ title: 'Log contact · ' + lead.name, body: form, foot });
+  const getProof = wireProof(form), err = $('.form-err', form);
+  $('[data-cancel]', m.el).onclick = m.close;
+  $('[data-save]', m.el).onclick = async () => {
+    const f = form.elements, body = { how: f.how.value, status: f.status.value, note: f.note.value, proof: getProof() };
+    if (need && !body.proof) { err.hidden = false; err.textContent = 'Add proof before saving: a screenshot of the call log, WhatsApp chat or email.'; return; }
+    const btn = $('[data-save]', m.el); btn.disabled = true; btn.textContent = 'Saving…';
+    try { await A(`/leads/${lead.id}/contact`, { method: 'POST', body }); m.close(); toast('Contact logged'); refreshLeadBadge(); after && after(); }
+    catch (e) { err.hidden = false; err.textContent = e.message; btn.disabled = false; btn.textContent = 'Save contact'; }
+  };
+}
+
+async function leadView(id) {
+  const [all, acts] = await Promise.all([A('/leads'), A(`/leads/${id}/activity`)]);
+  const lead = all.find(l => String(l.id) === String(id));
+  if (!lead) return toast('That lead no longer exists.', true);
+  const wa = waNum(lead.phone);
+  const det = typeof lead.details === 'string' ? JSON.parse(lead.details || 'null') : lead.details;
+  const body = document.createElement('div');
+  const kindLine = (a) => a.kind === 'created' ? `Added the lead${a.how ? ' · ' + HOW_LABEL[a.how] : ''}` : a.kind === 'contact' ? HOW_LABEL[a.how] || 'Contact' : 'Edited';
+  body.innerHTML = `
+    <div class="actions" style="margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn primary sm" type="button" data-log>Log contact</button>
+      ${lead.phone ? `<a class="btn sm" href="tel:${esc(lead.phone)}">Call</a>` : ''}
+      ${wa ? `<a class="btn sm" target="_blank" rel="noopener" href="https://wa.me/${wa}?text=${encodeURIComponent(`Hi ${lead.name.split(' ')[0]}, this is ${ME && ME.role !== 'admin' ? ME.name.split(' ')[0] + ' from ' : ''}The House of Services. `)}">WhatsApp</a>` : ''}
+      ${lead.email ? `<a class="btn sm" href="mailto:${esc(lead.email)}?subject=${encodeURIComponent('The House of Services')}">Email</a>` : ''}
+      <button class="btn sm" type="button" data-edit>Edit details</button>
+      ${isOwner() ? '<button class="btn sm lamp" type="button" data-convert>Make client</button>' : ''}
+    </div>
+    <div class="lead-info">
+      <div><b>Status</b>${pill(lead.status)}</div>
+      <div><b>Phone</b>${esc(lead.phone || '–')}</div>
+      <div><b>Email</b>${esc(lead.email || '–')}</div>
+      <div><b>Added</b>${dtt(lead.created_at)} · ${esc(lead.created_by || 'Website')}</div>
+      ${lead.services ? `<div style="grid-column:1/-1"><b>Interested in</b>${esc(lead.services)}</div>` : ''}
+      ${lead.message ? `<div style="grid-column:1/-1"><b>Notes</b><span style="white-space:pre-wrap">${esc(lead.message)}</span></div>` : ''}
+      ${lead.budget || lead.timeline ? `<div style="grid-column:1/-1"><b>Budget / timing</b>${esc([lead.budget, lead.timeline, lead.contact_pref && 'prefers ' + lead.contact_pref].filter(Boolean).join(' · '))}</div>` : ''}
+    </div>
+    ${det ? `<div style="background:var(--bg);border-radius:10px;padding:12px 14px;font-size:14px;margin-bottom:14px"><b>Quote request Q-${String(lead.id).padStart(4, '0')}</b>${Object.entries(det).map(([svc, ans]) => `<div style="margin-top:8px"><b>${esc(svc)}</b>${Object.keys(ans || {}).length ? `<ul style="margin:4px 0 0 18px">${Object.entries(ans).map(([q, a]) => `<li><span class="muted">${esc(q.replace(/\?$/, ''))}:</span> ${esc(Array.isArray(a) ? a.join(', ') : a)}</li>`).join('')}</ul>` : ''}</div>`).join('')}</div>` : ''}
+    <h3 style="font-size:15px;margin:6px 0 4px">History</h3>
+    ${acts.length ? `<ul class="tl">${acts.map(a => `<li><div><div class="t1">${esc(kindLine(a))}${a.status_to ? ' → ' + pill(a.status_to) : ''}</div>
+        <div class="t2">${dtt(a.created_at)} · ${esc(a.user_name)}</div>${a.note ? `<div class="note">${esc(a.note)}</div>` : ''}</div>
+        <div>${a.has_proof ? `<a href="${proofUrl(a.id)}" target="_blank" rel="noopener" title="Open proof"><img src="${proofUrl(a.id)}" alt="Proof" loading="lazy"></a>` : a.kind === 'edited' ? '' : '<span class="muted" style="font-size:12px">No proof</span>'}</div></li>`).join('')}</ul>`
+      : '<p class="muted" style="margin:6px 0">No contact logged yet.</p>'}`;
+  const m = modal({ title: lead.name + (lead.business ? ' · ' + lead.business : ''), body, wide: true });
+  const reopen = () => { m.close(); route(); leadView(id); };
+  $('[data-log]', body).onclick = () => logContactModal(lead, reopen);
+  $('[data-edit]', body).onclick = () => { m.close(); editRecord(CFG.leads, lead); };
+  const cv = $('[data-convert]', body);
+  if (cv) cv.onclick = async () => {
+    try {
+      const c = await A('/clients', { method: 'POST', body: { name: lead.business || lead.name, contact_person: lead.name, email: lead.email, phone: lead.phone, notes: [lead.services, lead.message].filter(Boolean).join('\n\n') } });
+      await A('/leads/' + lead.id, { method: 'PUT', body: { status: 'won' } });
+      m.close(); bust(); refreshLeadBadge(); toast('Client created from lead'); location.hash = 'client/' + c.id;
+    } catch (e) { toast(e.message, true); }
+  };
+}
+
+/* ================= team logins (owner) ================= */
+async function teamSection(el) {
+  let users;
+  try { users = await A('/users'); } catch (e) { el.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  el.innerHTML = `<div class="card" style="padding:22px;max-width:760px;margin-top:18px">
+    <div class="card-h" style="padding:0 0 10px"><h2>Team logins</h2><button class="btn sm primary" type="button" data-adduser>Add salesperson</button></div>
+    <p class="muted" style="margin:0 0 12px;font-size:14px">Salespeople only see Leads. Each person gets their own password, and that's all they type to log in.</p>
+    ${users.length ? `<table class="t"><thead><tr><th>Name</th><th>Last activity</th><th></th></tr></thead><tbody>${users.map(u => `<tr class="static">
+      <td><strong>${esc(u.name)}</strong>${u.active ? '' : ' <span class="pill mute">Switched off</span>'}</td><td>${u.last_at ? dtt(u.last_at) : '<span class="muted">–</span>'}</td>
+      <td style="white-space:nowrap;text-align:right"><button class="btn sm" type="button" data-pw="${u.id}">New password</button> <button class="btn sm" type="button" data-act="${u.id}" data-on="${u.active}">${u.active ? 'Switch off' : 'Switch on'}</button></td></tr>`).join('')}</tbody></table>`
+      : '<p class="muted">No team logins yet.</p>'}</div>`;
+  const reload = () => teamSection(el);
+  $('[data-adduser]', el).onclick = () => {
+    const form = document.createElement('form'); form.className = 'fgrid'; form.noValidate = true;
+    form.innerHTML = `<div class="f full"><label for="u_n">Name</label><input id="u_n" name="name" placeholder="For example: Ahmed Khan"></div>
+      <div class="f full"><label for="u_p">Their password</label><input id="u_p" name="password" type="text" placeholder="At least 6 characters"></div><p class="form-err full" hidden></p>`;
+    const foot = document.createElement('div'); foot.style.cssText = 'display:contents';
+    foot.innerHTML = `<div class="right"><button class="btn" type="button" data-cancel>Cancel</button><button class="btn primary" type="button" data-save>Create login</button></div>`;
+    const m = modal({ title: 'Add salesperson', body: form, foot });
+    $('[data-cancel]', m.el).onclick = m.close;
+    $('[data-save]', m.el).onclick = async () => {
+      const f = form.elements;
+      try { await A('/users', { method: 'POST', body: { name: f.name.value, password: f.password.value } }); m.close(); toast(`Login created. Send ${f.name.value.trim().split(' ')[0]} their password: ${f.password.value}`); reload(); }
+      catch (e) { const er = $('.form-err', form); er.hidden = false; er.textContent = e.message; }
+    };
+  };
+  el.querySelectorAll('[data-pw]').forEach(b => b.onclick = async () => {
+    const pw = prompt('New password for this person (at least 6 characters):'); if (!pw) return;
+    try { await A('/users/' + b.dataset.pw, { method: 'PUT', body: { password: pw } }); toast('Password changed'); } catch (e) { toast(e.message, true); }
+  });
+  el.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
+    const on = b.dataset.on === 'true';
+    if (on && !confirm('Switch off this login? They will be logged out straight away. Their history stays.')) return;
+    try { await A('/users/' + b.dataset.act, { method: 'PUT', body: { active: !on } }); toast(on ? 'Login switched off' : 'Login switched on'); reload(); } catch (e) { toast(e.message, true); }
+  });
 }
 
 /* ================= retainer month editing ================= */
@@ -836,22 +1048,29 @@ async function billModal(year, month, after) {
 async function debtorsView() {
   const main = $('#main');
   main.innerHTML = `<div class="page-head"><div><h1>Debtors</h1><p class="sub">Who owes you. Recording a payment reduces it straight away.</p></div><div class="actions"><button class="btn primary" data-pay>Record payment</button></div></div><div class="stat-grid"></div>
-    <div class="toolbar"><input type="search" placeholder="Search clients" aria-label="Search"><select data-type aria-label="Type"><option value="">All debtors</option><option value="retainer">Retainer clients</option><option value="once_off">Once-off clients</option></select><span class="count"></span></div>
+    <div class="toolbar"><input type="search" placeholder="Search clients" aria-label="Search"><select data-type aria-label="Type"><option value="">All debtors</option><option value="retainer">Retainer clients</option><option value="once_off">Once-off clients</option><option value="credit">In credit</option></select><span class="count"></span></div>
     <div class="card table-wrap"><p class="empty">Loading…</p></div>`;
   $('[data-pay]', main).onclick = () => editRecord(CFG.transactions, {}, { type: 'payment' });
   const all = await A('/debtors');
   const owing = all.filter(r => num(r.balance) > 0);
   const S = (k, rows = owing) => rows.reduce((a, r) => a + num(r[k]), 0);
+  const credit = all.filter(r => num(r.balance) < 0);
   $('.stat-grid', main).innerHTML = [
-    ['Total owed to you', money(S('balance')), `${owing.length} clients`, true],
-    ['Retainer clients', money(S('balance', owing.filter(r => r.billing === 'retainer'))), `${owing.filter(r => r.billing === 'retainer').length} owe you`],
-    ['Once-off clients', money(S('balance', owing.filter(r => r.billing !== 'retainer'))), `${owing.filter(r => r.billing !== 'retainer').length} owe you`],
-    ['In credit', money(-S('balance', all.filter(r => num(r.balance) < 0))), 'Paid ahead'],
-  ].map(([l, v, n, bad]) => `<div class="card kpi ${bad ? 'alert' : ''}"><div class="k-label">${l}</div><div class="k-val">${v}</div><div class="k-note">${n}</div></div>`).join('');
+    ['', 'Total owed to you', money(S('balance')), `${owing.length} clients`, true],
+    ['retainer', 'Retainer clients', money(S('balance', owing.filter(r => r.billing === 'retainer'))), `${owing.filter(r => r.billing === 'retainer').length} owe you`],
+    ['once_off', 'Once-off clients', money(S('balance', owing.filter(r => r.billing !== 'retainer'))), `${owing.filter(r => r.billing !== 'retainer').length} owe you`],
+    ['credit', 'In credit', money(-S('balance', credit)), `${credit.length} paid ahead`],
+  ].map(([f, l, v, n, bad]) => `<button type="button" class="card kpi pick ${bad ? 'alert' : ''}" data-f="${f}" aria-label="Show ${l.toLowerCase()}"><div class="k-label">${l}</div><div class="k-val">${v}</div><div class="k-note">${n} <span class="go">· show →</span></div></button>`).join('');
   const tb = $('.toolbar', main);
+  main.querySelectorAll('.kpi.pick').forEach(c => c.onclick = () => {
+    $('[data-type]', tb).value = c.dataset.f; $('input', tb).value = ''; draw();
+    $('.card.table-wrap', main).scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   const draw = () => {
     const qv = $('input', tb).value.trim().toLowerCase(), ty = $('[data-type]', tb).value;
-    const rows = all.filter(r => (!qv || r.name.toLowerCase().includes(qv)) && (!ty || r.billing === ty));
+    main.querySelectorAll('.kpi.pick').forEach(c => c.classList.toggle('on', c.dataset.f === ty));
+    const rows = all.filter(r => (!qv || r.name.toLowerCase().includes(qv))
+      && (!ty || (ty === 'credit' ? num(r.balance) < 0 : num(r.balance) > 0 && (ty === 'retainer' ? r.billing === 'retainer' : r.billing !== 'retainer'))));
     $('.count', tb).textContent = `${rows.length} of ${all.length}`;
     const card = $('.card.table-wrap', main);
     if (!rows.length) { card.innerHTML = '<p class="empty">Nobody here owes you anything.</p>'; return; }
@@ -1033,11 +1252,14 @@ async function settingsView() {
     e.preventDefault();
     try { await A('/settings', { method: 'PUT', body: { ...s, ...readForm(e.target, fields) } }); toast('Settings saved'); } catch (err) { toast(err.message, true); }
   });
+  const team = document.createElement('div'); $('#main').appendChild(team); teamSection(team);
 }
 
 /* ================= router ================= */
 async function route() {
-  const h = location.hash.slice(1) || 'dashboard';
+  if (!ME) return;   // not logged in yet
+  let h = location.hash.slice(1) || (isOwner() ? 'dashboard' : 'leads');
+  if (!isOwner() && !h.startsWith('leads')) { h = 'leads'; history.replaceState(null, '', '#leads'); }
   const [view, arg] = h.split('/');
   $('#app').classList.remove('menu');
   document.querySelectorAll('.side a.nav').forEach(a => a.classList.toggle('active', a.dataset.v === (view === 'client' ? 'clients' : view)));
@@ -1054,7 +1276,13 @@ async function route() {
 addEventListener('hashchange', route);
 let resizeT; addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if ((location.hash || '#dashboard') === '#dashboard') route(); }, 250); });
 
-function start() { $('#login').hidden = true; $('#app').hidden = false; refreshLeadBadge(); route(); }
+async function start() {
+  $('#login').hidden = true; $('#app').hidden = false;
+  try { ME = await A('/me'); } catch { return; }
+  document.body.classList.toggle('sales', !isOwner());
+  $('#whoAmI').textContent = 'Logged in as ' + ME.name;
+  refreshLeadBadge(); route();
+}
 token ? start() : showLogin();
 })();
 </script>
