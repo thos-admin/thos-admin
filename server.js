@@ -63,11 +63,23 @@ const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => {
             : e.code === '23505' ? 'That value already exists. Use a different one.'
             : e.code === '22P02' || e.code === '22007' || e.code === '22008' ? 'One of the fields has the wrong format. Check dates and amounts.'
             : 'Something went wrong on the server.';
-  res.status(e.status || 500).json({ error: msg });
+  // in the admin panel, show the real reason so problems can be fixed quickly
+  const detail = !e.msgOverride && !e.status && req.path.startsWith('/api/admin') ? ` (${e.message})` : '';
+  res.status(e.status || 500).json({ error: msg + detail });
 });
 
 // ---------- health ----------
 app.get('/healthz', (req, res) => res.json({ ok: true }));
+// open /health/db in a browser to check the database connection and tables
+app.get('/health/db', async (req, res) => {
+  const out = {};
+  try { await pool.query('select 1'); out.connection = 'ok'; } catch (e) { out.connection = 'FAILED: ' + e.message; return res.status(500).json(out); }
+  for (const t of ['clients', 'transactions', 'retainer_months', 'contracts', 'leads', 'settings', 'client_balances']) {
+    try { out[t] = Number((await pool.query(`select count(*) n from ${t}`)).rows[0].n); } catch (e) { out[t] = 'MISSING: ' + e.message; }
+  }
+  try { await pool.query('select charge_tx_id from retainer_months limit 1'); out.schema = 'latest'; } catch (e) { out.schema = 'OLD, run schema.sql again: ' + e.message; }
+  res.status(Object.values(out).some(v => String(v).match(/MISSING|OLD|FAILED/)) ? 500 : 200).json(out);
+});
 
 // ---------- public API ----------
 // The website may be hosted separately (e.g. Netlify/Afrihost); allow it to call these two public routes.
