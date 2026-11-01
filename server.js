@@ -346,17 +346,22 @@ app.delete('/api/admin/clients/:id', wrap(async (req, res) => {
 const TX_COLS = ['tx_date', 'type', 'client_id', 'amount', 'description', 'method', 'reference'];
 function txValues(b) {
   const bad = (msg) => { const e = new Error(msg); e.status = 400; e.msgOverride = msg; throw e; };
-  if (!['payment', 'charge', 'credit'].includes(b.type)) bad('Choose what kind of transaction this is.');
+  if (!['payment', 'expense', 'charge', 'credit'].includes(b.type)) bad('Choose what kind of transaction this is.');
   if (!(Number(b.amount) > 0)) bad('Enter an amount above zero.');
-  if (!b.client_id) bad('Choose the client.');
+  if (['charge', 'credit'].includes(b.type) && !b.client_id) bad('Choose the client.');
+  if (b.type !== 'payment' && !b.description && !b.client_id) bad('Add details, for example: Shopify, Meta ads, Kwik Print.');
   const v = { ...b, tx_date: b.tx_date || todaySA() };
+  if (b.type === 'expense') v.client_id = null;   // money out is never linked to a debtor
   return TX_COLS.map((c) => toNull(v[c]));
 }
 const MONTHS_FOR = (col) => `(select string_agg(to_char(make_date(m.year, m.month, 1), 'Mon YYYY'), ', ' order by m.year, m.month) from retainer_months m where m.${col} = t.id)`;
 
 app.get('/api/admin/transactions', wrap(async (req, res) => {
   const { rows } = await q(`
-    select t.*, c.name client_name, c.billing, ${MONTHS_FOR('tx_id')} as months, ${MONTHS_FOR('charge_tx_id')} as billed_for
+    select t.*, c.name client_name, c.billing, ${MONTHS_FOR('tx_id')} as months, ${MONTHS_FOR('charge_tx_id')} as billed_for,
+      case when t.type in ('payment','expense') then
+        sum(case t.type when 'payment' then t.amount when 'expense' then -t.amount else 0 end) over (order by t.tx_date, t.id)
+      end as running
     from transactions t left join clients c on c.id = t.client_id
     order by t.tx_date desc, t.id desc`);
   res.json(rows);
@@ -498,7 +503,7 @@ app.get('/api/admin/dashboard', wrap(async (req, res) => {
   await syncRetainers();
   const one = async (sql) => Number((await q(sql)).rows[0].v || 0);
   const m = `date_trunc('month', current_date)`;
-  const [incomeMonth, incomeLast, billedMonth, outstanding, activeRet, unbilled, newLeads, notRecCount, notRecAmt] = await Promise.all([
+  const [incomeMonth, incomeLast, billedMonth, outstanding, activeRet, unbilled, newLeads, notRecCount, notRecAmt, outMonth, bank] = await Promise.all([
     one(`select sum(amount) v from transactions where type='payment' and tx_date >= ${m}`),
     one(`select sum(amount) v from transactions where type='payment' and tx_date >= ${m} - interval '1 month' and tx_date < ${m}`),
     one(`select sum(amount) v from transactions where type='charge' and tx_date >= ${m} and coalesce(description,'') not like 'Opening balance%'`),
@@ -509,21 +514,24 @@ app.get('/api/admin/dashboard', wrap(async (req, res) => {
     one(`select count(*) v from leads where status = 'new'`),
     one(`select count(*) v from retainer_months where status='not_rec' and amount > 0`),
     one(`select sum(amount) v from retainer_months where status='not_rec' and amount > 0`),
+    one(`select sum(amount) v from transactions where type='expense' and tx_date >= ${m}`),
+    one(`select sum(case type when 'payment' then amount else -amount end) v from transactions where type in ('payment','expense')`),
   ]);
   const series = (await q(`
     with months as (select generate_series(${m} - interval '11 months', ${m}, interval '1 month')::date as month)
     select to_char(mo.month,'Mon YY') label, mo.month,
       coalesce((select sum(amount) from transactions where type='payment' and date_trunc('month', tx_date) = mo.month),0) income,
-      coalesce((select sum(amount) from transactions where type='charge' and coalesce(description,'') not like 'Opening balance%' and date_trunc('month', tx_date) = mo.month),0) billed
+      coalesce((select sum(amount) from transactions where type='charge' and coalesce(description,'') not like 'Opening balance%' and date_trunc('month', tx_date) = mo.month),0) billed,
+      coalesce((select sum(amount) from transactions where type='expense' and date_trunc('month', tx_date) = mo.month),0) out
     from months mo order by mo.month`)).rows;
   const topDebtors = (await q(`select c.id client_id, c.name client_name, c.billing, ${BAL} balance from clients c join client_balances b on b.client_id=c.id
     where ${BAL} > 0 order by ${BAL} desc limit 6`)).rows;
   const ending = (await q(`select k.id, k.title, k.end_date, k.value, k.kind, c.name client_name from contracts k join clients c on c.id=k.client_id
     where k.status='active' and k.end_date between current_date and current_date + 45 order by k.end_date`)).rows;
-  const recentPayments = (await q(`select t.amount, t.tx_date paid_on, t.method, t.description, c.name client_name from transactions t
-    join clients c on c.id=t.client_id where t.type='payment' order by t.tx_date desc, t.id desc limit 6`)).rows;
+  const recentPayments = (await q(`select t.amount, t.tx_date paid_on, t.method, case when c.name is null then null else t.description end description, coalesce(c.name, t.description, 'Money in') client_name from transactions t
+    left join clients c on c.id=t.client_id where t.type='payment' order by t.tx_date desc, t.id desc limit 6`)).rows;
   res.json({
-    kpis: { incomeMonth, incomeLast, billedMonth, outstanding, activeRet, unbilled, newLeads, notRecCount, notRecAmt },
+    kpis: { incomeMonth, incomeLast, billedMonth, outstanding, activeRet, unbilled, newLeads, notRecCount, notRecAmt, outMonth, bank },
     series, topDebtors, ending, recentPayments,
   });
 }));
