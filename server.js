@@ -68,6 +68,14 @@ const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => {
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 
 // ---------- public API ----------
+// The website may be hosted separately (e.g. Netlify/Afrihost); allow it to call these two public routes.
+app.use(['/api/portfolio', '/api/leads'], (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', process.env.WEBSITE_ORIGIN || '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 app.get('/api/portfolio', wrap(async (req, res) => {
   const { rows } = await q('select id, name, category, url, blurb, image_url from portfolio where visible order by sort, id');
   res.set('Cache-Control', 'public, max-age=300').json(rows);
@@ -374,10 +382,29 @@ app.put('/api/admin/settings', wrap(async (req, res) => {
 app.use('/api', (req, res) => res.status(404).json({ error: 'Unknown API route.' }));
 
 // ---------- static ----------
-const FRONT = path.join(__dirname, '..', 'frontend');
-const ADMIN = path.join(__dirname, '..', 'admin');
-app.use('/admin', express.static(ADMIN, { index: 'index.html' }));
-app.use(express.static(FRONT, { extensions: ['html'], maxAge: '1h' }));
-app.use((req, res) => res.status(404).sendFile(path.join(FRONT, 'index.html')));
+// Works with either layout:
+//   1) repo with folders:  backend/server.js + admin/index.html + frontend/index.html
+//   2) flat repo:          server.js + index.html (admin panel) [+ public/index.html for the website]
+const fs = require('fs');
+const has = (dir) => fs.existsSync(path.join(dir, 'index.html'));
+const pick = (...dirs) => dirs.find(has);
+const ADMIN_DIR = pick(path.join(__dirname, '..', 'admin'), path.join(__dirname, 'admin'));
+const FRONT_DIR = pick(path.join(__dirname, '..', 'frontend'), path.join(__dirname, 'frontend'), path.join(__dirname, 'public'));
+const FLAT_INDEX = has(__dirname) ? path.join(__dirname, 'index.html') : null; // flat repo: root index.html is the admin panel
+
+if (ADMIN_DIR) app.use('/admin', express.static(ADMIN_DIR, { index: 'index.html' }));
+else if (FLAT_INDEX) app.get(['/admin', '/admin/'], (req, res) => res.sendFile(FLAT_INDEX));
+
+if (FRONT_DIR) {
+  app.use(express.static(FRONT_DIR, { extensions: ['html'], maxAge: '1h' }));
+  app.use((req, res) => res.status(404).sendFile(path.join(FRONT_DIR, 'index.html')));
+} else if (FLAT_INDEX) {
+  // no public website in this repo: send visitors to the admin panel
+  app.get('/', (req, res) => res.redirect('/admin'));
+  app.use((req, res) => res.status(404).send('Not found'));
+} else {
+  app.use((req, res) => res.status(404).send('Not found'));
+}
+console.log(`[static] admin: ${ADMIN_DIR || FLAT_INDEX || 'none'} | website: ${FRONT_DIR || 'none'}`);
 
 app.listen(PORT, () => console.log(`THOS running on :${PORT}`));
