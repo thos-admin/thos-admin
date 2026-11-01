@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en-ZA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>THOS Admin</title>
+<meta name="theme-color" content="#0b1320">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b1320'/%3E%3Cpath d='M12 30 32 13l20 17v21H12z' fill='none' stroke='%23FFC629' stroke-width='5' stroke-linejoin='round'/%3E%3Crect x='27' y='35' width='10' height='10' fill='%23FFC629'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --night:#0b1320; --night-2:#131e33; --lamp:#FFC629;
+  --bg:#f3f5f8; --card:#ffffff; --ink:#0b1320; --ink-2:#47526a; --muted:#6b7690; --line:#e3e7ee; --line-2:#d3d9e3;
+  --income:#4170c0; --expense:#b97f00;
+  --good:#18794e; --good-bg:#e6f4ec; --warn:#94600a; --warn-bg:#fdf3dc; --bad:#b4232c; --bad-bg:#fde8e8; --info:#2c5aa0; --info-bg:#e7eefa; --mute-bg:#eef0f4;
+  --display:"Big Shoulders Display","Arial Narrow",sans-serif; --body:"Hanken Grotesk",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--body);background:var(--bg);color:var(--ink);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+a{color:var(--info)}
+:focus-visible{outline:3px solid var(--lamp);outline-offset:2px}
+.num,td.money,th.money{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+[hidden]{display:none !important}
+
+/* login */
+.login{min-height:100vh;display:grid;place-items:center;background:var(--night);padding:20px}
+.login form{width:min(380px,100%);background:var(--night-2);border:1px solid #25344f;border-radius:10px;padding:36px 30px;color:#eef1f6}
+.login svg{width:44px;height:44px;margin-bottom:18px}
+.login h1{font-family:var(--display);font-weight:800;font-size:34px;line-height:1;margin-bottom:6px}
+.login p{color:#93a0b8;margin-bottom:24px}
+.login input{width:100%;padding:13px 14px;border-radius:6px;border:1.5px solid #2c3c5b;background:var(--night);color:#eef1f6;margin-bottom:14px}
+.login input:focus{outline:none;border-color:var(--lamp)}
+.login .err{color:#ff9b8a;font-size:14px;min-height:20px;margin:-4px 0 10px}
+
+/* shell */
+.app{display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100vh}
+.side{background:var(--night);color:#c5cddc;position:sticky;top:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column;padding:20px 12px}
+.side-brand{display:flex;align-items:center;gap:10px;padding:2px 10px 22px;color:#fff;text-decoration:none}
+.side-brand svg{width:30px;height:30px}
+.side-brand b{font-family:var(--display);font-weight:800;font-size:20px;line-height:1}
+.side-group{font-size:12px;font-weight:600;color:#5f6e8b;padding:16px 12px 6px}
+.side a.nav{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border-radius:6px;text-decoration:none;color:#c5cddc;font-weight:500;position:relative}
+.side a.nav:hover{background:#131e33;color:#fff}
+.side a.nav.active{background:#18253c;color:#fff}
+.side a.nav.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--lamp)}
+.badge{background:var(--lamp);color:var(--night);font-size:12px;font-weight:700;border-radius:999px;padding:1px 8px;min-width:22px;text-align:center}
+.side-foot{margin-top:auto;padding:16px 12px 4px;display:flex;flex-direction:column;gap:8px}
+.side-foot a,.side-foot button{color:#93a0b8;font-size:14px;text-decoration:none;text-align:left}
+.side-foot a:hover,.side-foot button:hover{color:#fff}
+.topbar{display:none}
+main{padding:28px 32px 60px;min-width:0}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.page-head h1{font-family:var(--display);font-weight:800;font-size:38px;line-height:1}
+.page-head .sub{color:var(--muted);margin-top:6px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:6px;font-weight:600;font-size:14px;border:1.5px solid var(--line-2);background:var(--card);color:var(--ink);text-decoration:none;white-space:nowrap}
+.btn:hover{border-color:var(--ink-2)}
+.btn.primary{background:var(--night);border-color:var(--night);color:#fff}
+.btn.primary:hover{background:#1c2a44}
+.btn.lamp{background:var(--lamp);border-color:var(--lamp);color:var(--night)}
+.btn.danger{color:var(--bad);border-color:#f0c4c6}
+.btn.danger:hover{border-color:var(--bad)}
+.btn.sm{padding:6px 10px;font-size:13px}
+.btn[disabled]{opacity:.55;cursor:wait}
+
+/* toolbar */
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.toolbar input,.toolbar select{padding:9px 12px;border:1.5px solid var(--line-2);border-radius:6px;background:var(--card)}
+.toolbar input[type=search]{min-width:240px;flex:1;max-width:340px}
+.toolbar .count{margin-left:auto;color:var(--muted);font-size:14px}
+
+/* cards & tables */
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px}
+.card-h{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 18px 10px}
+.card-h h2{font-size:16px;font-weight:700}
+.card-h a,.card-h button{font-size:14px;font-weight:600;color:var(--info)}
+.table-wrap{overflow-x:auto}
+table.t{width:100%;border-collapse:collapse;font-size:14px}
+.t th{text-align:left;font-weight:600;color:var(--muted);font-size:13px;padding:11px 14px;border-bottom:1px solid var(--line);white-space:nowrap;background:#fafbfc}
+.t th.money,.t th.num{text-align:right}
+.t td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+.t tbody tr{cursor:pointer}
+.t tbody tr:hover td{background:#f7f9fc}
+.t tfoot td{font-weight:700;background:#fafbfc;border-bottom:0}
+.t td strong{font-weight:600}
+.t .muted{color:var(--muted)}
+.t tr.static{cursor:default}
+.empty{padding:40px 20px;text-align:center;color:var(--muted)}
+.empty .btn{margin-top:12px}
+
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.pill.good{background:var(--good-bg);color:var(--good)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.pill.info{background:var(--info-bg);color:var(--info)}
+.pill.mute{background:var(--mute-bg);color:var(--ink-2)}
+.neg{color:var(--bad)}
+.pos{color:var(--good)}
+
+/* dashboard */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
+.kpi{padding:16px 18px}
+.kpi .k-label{color:var(--muted);font-size:13px;font-weight:600}
+.kpi .k-val{font-size:26px;font-weight:700;letter-spacing:-.01em;margin-top:4px;font-variant-numeric:tabular-nums;line-height:1.15}
+.kpi .k-note{font-size:13px;color:var(--muted);margin-top:4px}
+.kpi.alert .k-val{color:var(--bad)}
+a.kpi{text-decoration:none;color:inherit;display:block}
+a.kpi:hover{border-color:var(--line-2)}
+.dash-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:14px}
+.chart-card{padding-bottom:12px}
+.legend{display:flex;gap:16px;font-size:13px;color:var(--ink-2)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.chart{position:relative;padding:4px 18px 0}
+.chart svg{width:100%;height:260px;display:block;overflow:visible}
+.tip{position:absolute;pointer-events:none;background:var(--night);color:#fff;font-size:13px;padding:8px 10px;border-radius:6px;white-space:nowrap;transform:translate(-50%,-100%);margin-top:-8px;z-index:3;box-shadow:0 6px 18px rgba(11,19,32,.25)}
+.tip b{display:block;margin-bottom:2px}
+.tip span{display:flex;justify-content:space-between;gap:14px}
+.list{list-style:none}
+.list li{display:flex;justify-content:space-between;gap:12px;padding:10px 18px;border-top:1px solid var(--line);font-size:14px}
+.list li .sub{color:var(--muted);font-size:13px}
+.list li > div:last-child{text-align:right;white-space:nowrap}
+
+/* statement */
+.stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
+.section{margin-top:18px}
+.info-row{display:flex;gap:22px;flex-wrap:wrap;color:var(--ink-2);margin-top:8px;font-size:14px}
+.back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-weight:600;font-size:14px;margin-bottom:10px}
+.back:hover{color:var(--ink)}
+
+/* modal */
+.modal-bg{position:fixed;inset:0;background:rgba(11,19,32,.55);display:flex;align-items:flex-start;justify-content:center;padding:5vh 16px;z-index:60;overflow-y:auto}
+.modal{background:var(--card);border-radius:12px;width:min(620px,100%);box-shadow:0 30px 80px rgba(11,19,32,.35)}
+.modal.wide{width:min(900px,100%)}
+.modal-h{display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:1px solid var(--line)}
+.modal-h h2{font-size:18px;font-weight:700}
+.modal-x{width:34px;height:34px;border-radius:6px;font-size:22px;line-height:1;color:var(--muted)}
+.modal-x:hover{background:var(--bg);color:var(--ink)}
+.modal-b{padding:20px 22px}
+.modal-f{display:flex;justify-content:space-between;gap:10px;padding:14px 22px;border-top:1px solid var(--line);background:#fafbfc;border-radius:0 0 12px 12px;flex-wrap:wrap}
+.modal-f .right{display:flex;gap:8px;margin-left:auto}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.f{display:flex;flex-direction:column;gap:6px}
+.f.full,.fgrid > .full{grid-column:1/-1}
+.fgrid > .actions{align-items:center}
+.f label{font-size:13px;font-weight:600;color:var(--ink-2)}
+.f input,.f select,.f textarea{padding:10px 12px;border:1.5px solid var(--line-2);border-radius:6px;background:#fff;width:100%}
+.f input:focus,.f select:focus,.f textarea:focus{outline:none;border-color:var(--night)}
+.f textarea{min-height:84px;resize:vertical}
+.f .hint{font-size:12px;color:var(--muted)}
+.check{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
+.form-err{color:var(--bad);font-size:14px;font-weight:500;margin-top:12px}
+
+/* invoice editor */
+.items{width:100%;border-collapse:collapse;margin-top:6px}
+.items th{font-size:12px;color:var(--muted);text-align:left;padding:6px 6px;font-weight:600}
+.items td{padding:4px 6px;vertical-align:top}
+.items input{width:100%;padding:9px 10px;border:1.5px solid var(--line-2);border-radius:6px}
+.items input:focus{outline:none;border-color:var(--night)}
+.items .rm{width:32px;height:38px;color:var(--muted);font-size:20px}
+.items .rm:hover{color:var(--bad)}
+.inv-total{display:flex;justify-content:flex-end;gap:24px;font-weight:700;font-size:18px;margin-top:12px;font-variant-numeric:tabular-nums}
+.kv{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.kv div{background:var(--bg);border-radius:8px;padding:10px 12px}
+.kv span{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.kv b{font-size:17px;font-variant-numeric:tabular-nums}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--night);color:#fff;padding:12px 18px;border-radius:8px;font-weight:600;font-size:14px;z-index:80;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.toast.err{background:var(--bad)}
+
+@media (max-width:1100px){ .kpis,.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))} .dash-grid{grid-template-columns:1fr} }
+@media (max-width:860px){
+  .app{grid-template-columns:1fr}
+  .side{position:fixed;inset:0 auto 0 0;width:260px;z-index:70;transform:translateX(-100%);transition:transform .25s}
+  .app.menu .side{transform:none;box-shadow:20px 0 60px rgba(0,0,0,.35)}
+  .topbar{display:flex;align-items:center;justify-content:space-between;background:var(--night);color:#fff;padding:10px 14px;position:sticky;top:0;z-index:50}
+  .topbar b{font-family:var(--display);font-weight:800;font-size:20px}
+  .topbar button{color:#fff;width:40px;height:40px;font-size:22px}
+  main{padding:20px 14px 60px}
+  .page-head h1{font-size:32px}
+  .fgrid{grid-template-columns:1fr}
+  .kv{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .toolbar input[type=search]{min-width:0;max-width:none;width:100%}
+  .kpi .k-val{font-size:22px}
+}
+@media print{ .side,.topbar,.actions,.toolbar{display:none !important} .app{display:block} main{padding:0} }
+</style>
+</head>
+<body>
+
+<div class="login" id="login" hidden>
+  <form id="loginForm">
+    <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 30 32 9l24 21v25H8z" fill="none" stroke="#FFC629" stroke-width="5" stroke-linejoin="round"/><rect x="26" y="34" width="12" height="12" fill="#FFC629"/></svg>
+    <h1>THOS Admin</h1>
+    <p>Log in to manage clients, invoices and payments.</p>
+    <label for="pw" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:#c5cddc">Password</label>
+    <input id="pw" type="password" autocomplete="current-password" required autofocus>
+    <p class="err" id="loginErr" role="alert"></p>
+    <button class="btn lamp" style="width:100%;justify-content:center;padding:12px" type="submit">Log in</button>
+  </form>
+</div>
+
+<div class="app" id="app" hidden>
+  <aside class="side" id="side">
+    <a class="side-brand" href="#dashboard"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 30 32 9l24 21v25H8z" fill="none" stroke="#FFC629" stroke-width="5" stroke-linejoin="round"/><rect x="26" y="34" width="12" height="12" fill="#FFC629"/></svg><b>The House of Services</b></a>
+    <a class="nav" href="#dashboard" data-v="dashboard">Dashboard</a>
+    <div class="side-group">Clients</div>
+    <a class="nav" href="#clients" data-v="clients">Clients</a>
+    <a class="nav" href="#contracts" data-v="contracts">Contracts</a>
+    <a class="nav" href="#leads" data-v="leads">Leads <span class="badge" id="leadBadge" hidden></span></a>
+    <div class="side-group">Money</div>
+    <a class="nav" href="#invoices" data-v="invoices">Invoices</a>
+    <a class="nav" href="#debtors" data-v="debtors">Debtors</a>
+    <a class="nav" href="#payments" data-v="payments">Payments</a>
+    <a class="nav" href="#credit_notes" data-v="credit_notes">Credit notes</a>
+    <a class="nav" href="#ad_spend" data-v="ad_spend">Ad spend</a>
+    <a class="nav" href="#expenses" data-v="expenses">Expenses</a>
+    <div class="side-group">Website</div>
+    <a class="nav" href="#portfolio" data-v="portfolio">Portfolio</a>
+    <a class="nav" href="#settings" data-v="settings">Settings</a>
+    <div class="side-foot">
+      <a href="/" target="_blank" rel="noopener">View website</a>
+      <button id="logout">Log out</button>
+    </div>
+  </aside>
+  <div>
+    <div class="topbar"><button id="menuBtn" aria-label="Open menu">☰</button><b>THOS Admin</b><span style="width:40px"></span></div>
+    <main id="main"></main>
+  </div>
+</div>
+
+<script>
+(() => {
+/* ================= helpers ================= */
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v) => Number(v || 0);
+const money = (v, dash) => {
+  const n = num(v);
+  if (dash && !n) return '<span class="muted">–</span>';
+  const s = Math.abs(n).toFixed(2).split('.');
+  return (n < 0 ? '−' : '') + 'R ' + s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + s[1];
+};
+const moneyShort = (n) => { n = num(n); const a = Math.abs(n); return (n < 0 ? '−' : '') + 'R ' + (a >= 1e6 ? (a/1e6).toFixed(1) + 'm' : a >= 1e3 ? (a/1e3).toFixed(a >= 1e4 ? 0 : 1) + 'k' : a.toFixed(0)); };
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const dt = (s) => { if (!s) return '<span class="muted">–</span>'; const [y,m,d] = String(s).slice(0,10).split('-'); return `${+d} ${MONTHS[m-1]} ${y}`; };
+const mon = (s) => { if (!s) return '–'; const [y,m] = String(s).slice(0,7).split('-'); return `${MONTHS[m-1]} ${y}`; };
+const todayISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,10); };
+const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); };
+const waNum = (p) => { let d = String(p || '').replace(/\D/g, ''); if (d.startsWith('0')) d = '27' + d.slice(1); return d; };
+const PILL = {
+  active:'good', paid:'good', won:'good', completed:'mute', ended:'mute', cancelled:'mute', void:'mute', lost:'mute', draft:'mute',
+  paused:'warn', partial:'warn', quoted:'info', contacted:'info', unpaid:'info', sent:'info', new:'warn', overdue:'bad', retainer:'info', project:'mute',
+};
+const pill = (s) => s ? `<span class="pill ${PILL[s] || 'mute'}">${esc(s[0].toUpperCase() + s.slice(1))}</span>` : '';
+
+let token = localStorage.getItem('thos_token');
+const cache = {};
+
+async function api(path, opts = {}) {
+  const r = await fetch('/api' + path, {
+    method: opts.method || 'GET',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401 && path !== '/login') { logout(j.error); throw new Error(j.error || 'Log in again.'); }
+  if (!r.ok) throw new Error(j.error || 'The server could not complete that request.');
+  return j;
+}
+const A = (p, o) => api('/admin' + p, o);
+
+function toast(msg, err) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (err ? ' err' : '');
+  t.textContent = msg; t.setAttribute('role', 'status');
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), err ? 4500 : 2600);
+}
+
+/* ================= auth ================= */
+function showLogin(msg) {
+  $('#app').hidden = true; $('#login').hidden = false;
+  $('#loginErr').textContent = msg || '';
+  setTimeout(() => $('#pw').focus(), 50);
+}
+function logout(msg) { token = null; localStorage.removeItem('thos_token'); showLogin(msg); }
+$('#loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button'); btn.disabled = true;
+  try {
+    const { token: t } = await api('/login', { method: 'POST', body: { password: $('#pw').value } });
+    token = t; localStorage.setItem('thos_token', t); $('#pw').value = '';
+    start();
+  } catch (err) { $('#loginErr').textContent = err.message; }
+  btn.disabled = false;
+});
+$('#logout').addEventListener('click', () => logout());
+$('#menuBtn').addEventListener('click', () => $('#app').classList.toggle('menu'));
+
+/* ================= data helpers ================= */
+async function clients(force) { if (force || !cache.clients) cache.clients = await A('/clients'); return cache.clients; }
+async function invoices(force) { if (force || !cache.invoices) cache.invoices = await A('/invoices'); return cache.invoices; }
+async function contracts(force) { if (force || !cache.contracts) cache.contracts = await A('/contracts'); return cache.contracts; }
+const bust = () => { delete cache.clients; delete cache.invoices; delete cache.contracts; };
+async function refreshLeadBadge() {
+  try { const l = await A('/leads'); const n = l.filter(x => x.status === 'new').length; const b = $('#leadBadge'); b.hidden = !n; b.textContent = n; } catch {}
+}
+
+/* ================= modal + form builder ================= */
+function modal({ title, body, wide, foot }) {
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = `<div class="modal ${wide ? 'wide' : ''}" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+    <div class="modal-h"><h2>${esc(title)}</h2><button class="modal-x" aria-label="Close">×</button></div>
+    <div class="modal-b"></div>${foot ? '<div class="modal-f"></div>' : ''}</div>`;
+  const m = bg.firstElementChild;
+  if (typeof body === 'string') $('.modal-b', m).innerHTML = body; else $('.modal-b', m).appendChild(body);
+  if (foot) { if (typeof foot === 'string') $('.modal-f', m).innerHTML = foot; else $('.modal-f', m).appendChild(foot); }
+  const close = () => { bg.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  $('.modal-x', m).addEventListener('click', close);
+  bg.addEventListener('mousedown', (e) => { if (e.target === bg) close(); });
+  document.body.appendChild(bg);
+  setTimeout(() => { const f = m.querySelector('input:not([type=hidden]):not([type=checkbox]),select,textarea'); f && f.focus(); }, 30);
+  return { el: m, close };
+}
+
+async function fieldHTML(f, val) {
+  const id = 'f_' + f.k;
+  const req = f.req ? ' required' : '';
+  const v = val ?? f.def ?? '';
+  let input;
+  switch (f.t) {
+    case 'textarea': input = `<textarea id="${id}" name="${f.k}"${req}>${esc(v)}</textarea>`; break;
+    case 'select': input = `<select id="${id}" name="${f.k}"${req}>${f.opts.map(o => { const [ov, ol] = Array.isArray(o) ? o : [o, o[0].toUpperCase() + o.slice(1)]; return `<option value="${esc(ov)}"${String(ov) === String(v) ? ' selected' : ''}>${esc(ol)}</option>`; }).join('')}</select>`; break;
+    case 'client': {
+      const cs = await clients();
+      input = `<select id="${id}" name="${f.k}"${req}><option value="">${f.req ? 'Choose a client' : 'Not linked to a client'}</option>${cs.map(c => `<option value="${c.id}"${String(c.id) === String(v) ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select>`;
+      break;
+    }
+    case 'invoice': input = `<select id="${id}" name="${f.k}" data-val="${esc(v)}"><option value="">Not linked to an invoice</option></select>`; break;
+    case 'contract': input = `<select id="${id}" name="${f.k}" data-val="${esc(v)}"><option value="">Not linked to a contract</option></select>`; break;
+    case 'money': input = `<input id="${id}" name="${f.k}" type="number" step="0.01" min="0" inputmode="decimal" value="${esc(v)}"${req}>`; break;
+    case 'number': input = `<input id="${id}" name="${f.k}" type="number" step="1" value="${esc(v)}"${req}>`; break;
+    case 'date': input = `<input id="${id}" name="${f.k}" type="date" value="${esc(String(v).slice(0,10))}"${req}>`; break;
+    case 'month': input = `<input id="${id}" name="${f.k}" type="month" value="${esc(String(v).slice(0,7))}"${req}>`; break;
+    case 'checkbox': return `<div class="f ${f.full ? 'full' : ''}"><label class="check"><input type="checkbox" name="${f.k}"${v === true || v === 'true' || v === '' && f.def ? ' checked' : ''}> ${esc(f.l)}</label></div>`;
+    default: input = `<input id="${id}" name="${f.k}" type="${f.t || 'text'}" value="${esc(v)}"${req}>`;
+  }
+  return `<div class="f ${f.full || f.t === 'textarea' ? 'full' : ''}"><label for="${id}">${esc(f.l)}${f.req || f.t === 'select' ? '' : ' <span style="font-weight:400;color:var(--muted)">(optional)</span>'}</label>${input}${f.hint ? `<span class="hint">${esc(f.hint)}</span>` : ''}</div>`;
+}
+
+// Fill invoice/contract selects based on the chosen client
+async function wireLinkedSelects(form) {
+  const cSel = form.querySelector('[name=client_id]');
+  const iSel = form.querySelector('select[name=invoice_id]');
+  const kSel = form.querySelector('select[name=contract_id]');
+  if (!cSel || (!iSel && !kSel)) return;
+  const [invs, cons] = await Promise.all([iSel ? invoices(true) : [], kSel ? contracts() : []]);
+  const fill = () => {
+    const cid = cSel.value;
+    if (iSel) {
+      const keep = iSel.value || iSel.dataset.val;
+      const list = invs.filter(i => String(i.client_id) === cid && i.status !== 'void' && (num(i.balance) > 0 || String(i.id) === String(keep)));
+      iSel.innerHTML = `<option value="">Not linked to an invoice</option>` + list.map(i => `<option value="${i.id}" data-bal="${i.balance}"${String(i.id) === String(keep) ? ' selected' : ''}>${esc(i.number)} · ${money(i.balance)} owing</option>`).join('');
+    }
+    if (kSel) {
+      const keep = kSel.value || kSel.dataset.val;
+      const list = cons.filter(k => String(k.client_id) === cid);
+      kSel.innerHTML = `<option value="">Not linked to a contract</option>` + list.map(k => `<option value="${k.id}"${String(k.id) === String(keep) ? ' selected' : ''}>${esc(k.title)}</option>`).join('');
+    }
+  };
+  cSel.addEventListener('change', fill); fill();
+  // Pick an invoice → prefill the amount with what's owing
+  if (iSel) iSel.addEventListener('change', () => {
+    const amt = form.querySelector('[name=amount]');
+    const bal = iSel.selectedOptions[0]?.dataset.bal;
+    if (amt && bal && !amt.value) amt.value = num(bal).toFixed(2);
+  });
+}
+
+function readForm(form, fields) {
+  const out = {};
+  for (const f of fields) {
+    const el = form.elements[f.k];
+    if (!el) continue;
+    let v = f.t === 'checkbox' ? el.checked : el.value.trim();
+    if (f.t === 'month' && v) v = v + '-01';
+    out[f.k] = v;
+  }
+  return out;
+}
+
+async function editRecord(cfg, rec = {}, presets = {}) {
+  const isNew = !rec.id;
+  const vals = { ...rec, ...presets };
+  const form = document.createElement('form');
+  form.className = 'fgrid'; form.noValidate = true;
+  form.innerHTML = (await Promise.all(cfg.fields.map(f => fieldHTML(f, vals[f.k])))).join('') + '<p class="form-err full" hidden></p>';
+  const foot = document.createElement('div');
+  foot.style.cssText = 'display:contents';
+  foot.innerHTML = `${!isNew ? '<button class="btn danger" type="button" data-del>Delete</button>' : ''}<div class="right"><button class="btn" type="button" data-cancel>Cancel</button><button class="btn primary" type="button" data-save>${isNew ? 'Add ' + cfg.one : 'Save changes'}</button></div>`;
+  const m = modal({ title: (isNew ? 'Add ' : 'Edit ') + cfg.one, body: form, foot });
+  await wireLinkedSelects(form);
+  if (cfg.onForm) cfg.onForm(form, rec, m);
+  const errEl = form.querySelector('.form-err');
+  const save = async () => {
+    const data = readForm(form, cfg.fields);
+    const missing = cfg.fields.find(f => f.req && !String(data[f.k] ?? '').trim());
+    if (missing) { errEl.hidden = false; errEl.textContent = `Add ${missing.l.toLowerCase()} before saving.`; form.elements[missing.k].focus(); return; }
+    const btn = $('[data-save]', m.el); btn.disabled = true;
+    try {
+      await A(`/${cfg.ep}${isNew ? '' : '/' + rec.id}`, { method: isNew ? 'POST' : 'PUT', body: data });
+      m.close(); bust(); toast(isNew ? `${cap(cfg.one)} added` : 'Changes saved'); route();
+      if (cfg.ep === 'leads') refreshLeadBadge();
+    } catch (e) { errEl.hidden = false; errEl.textContent = e.message; btn.disabled = false; }
+  };
+  form.addEventListener('submit', (e) => { e.preventDefault(); save(); });
+  $('[data-save]', m.el).addEventListener('click', save);
+  $('[data-cancel]', m.el).addEventListener('click', m.close);
+  const del = $('[data-del]', m.el);
+  if (del) del.addEventListener('click', async () => {
+    if (!confirm(`Delete this ${cfg.one}? This can’t be undone.`)) return;
+    try { await A(`/${cfg.ep}/${rec.id}`, { method: 'DELETE' }); m.close(); bust(); toast(`${cap(cfg.one)} deleted`); route(); }
+    catch (e) { errEl.hidden = false; errEl.textContent = e.message; }
+  });
+  return m;
+}
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+
+/* ================= list configs ================= */
+const METHODS = ['EFT','Cash','Card','PayFast','Yoco','Other'];
+const EXP_CATS = ['Software & subscriptions','Hosting & domains','Printing & suppliers','Advertising (own)','Equipment','Transport','Salaries & contractors','Rent & office','Bank fees','Other'];
+const PERIODS = [['all','All time'],['this','This month'],['last','Last month'],['year','This year'],['ytd12','Last 12 months']];
+function inPeriod(iso, p) {
+  if (p === 'all' || !iso) return true;
+  const d = String(iso).slice(0,10), now = new Date();
+  const ym = (y, m) => `${y}-${String(m + 1).padStart(2,'0')}`;
+  const thisM = ym(now.getFullYear(), now.getMonth());
+  const lastD = new Date(now.getFullYear(), now.getMonth() - 1, 1), lastM = ym(lastD.getFullYear(), lastD.getMonth());
+  if (p === 'this') return d.startsWith(thisM);
+  if (p === 'last') return d.startsWith(lastM);
+  if (p === 'year') return d.startsWith(String(now.getFullYear()));
+  if (p === 'ytd12') { const s = new Date(now.getFullYear(), now.getMonth() - 11, 1); return d >= ym(s.getFullYear(), s.getMonth()) + '-01'; }
+  return true;
+}
+
+const CFG = {
+  clients: {
+    title: 'Clients', one: 'client', ep: 'clients', sub: 'Everyone you bill, with what they owe right now.',
+    search: ['name','contact_person','email','phone','industry'], statusKey: 'status', statuses: ['active','paused','ended'],
+    cols: [
+      { l: 'Client', r: c => `<strong>${esc(c.name)}</strong>${c.industry ? `<div class="muted" style="font-size:13px">${esc(c.industry)}</div>` : ''}` },
+      { l: 'Contact', r: c => esc(c.contact_person || '') + (c.phone ? `<div class="muted" style="font-size:13px">${esc(c.phone)}</div>` : '') },
+      { l: 'Status', r: c => pill(c.status) },
+      { l: 'Active contracts', cls: 'num', r: c => c.active_contracts || '<span class="muted">–</span>' },
+      { l: 'Balance owing', cls: 'money', sum: 'balance', r: c => `<span class="${num(c.balance) > 0 ? 'neg' : ''}">${money(c.balance, true)}</span>` },
+    ],
+    fields: [
+      { k: 'name', l: 'Business name', req: true, full: true },
+      { k: 'contact_person', l: 'Contact person' }, { k: 'phone', l: 'Phone', t: 'tel' },
+      { k: 'email', l: 'Email', t: 'email' }, { k: 'industry', l: 'Industry' },
+      { k: 'status', l: 'Status', t: 'select', opts: ['active','paused','ended'], def: 'active' },
+      { k: 'address', l: 'Billing address', t: 'textarea' }, { k: 'notes', l: 'Notes', t: 'textarea' },
+    ],
+    open: (c) => { location.hash = 'client/' + c.id; },
+  },
+  contracts: {
+    title: 'Contracts', one: 'contract', ep: 'contracts', sub: 'Retainers and project agreements, with renewal dates.',
+    search: ['client_name','title','notes'], statusKey: 'status', statuses: ['draft','active','completed','cancelled'],
+    cols: [
+      { l: 'Client', r: k => `<strong>${esc(k.client_name)}</strong>` },
+      { l: 'Contract', r: k => esc(k.title) + (k.file_url ? ` <a href="${esc(k.file_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:13px">View file</a>` : '') },
+      { l: 'Type', r: k => pill(k.kind) },
+      { l: 'Starts', r: k => dt(k.start_date) },
+      { l: 'Ends', r: k => { const soon = k.status === 'active' && k.end_date && k.end_date <= addDays(todayISO(), 30); return `<span class="${soon ? 'neg' : ''}">${dt(k.end_date)}</span>`; } },
+      { l: 'Status', r: k => pill(k.status) },
+      { l: 'Value', cls: 'money', r: k => money(k.value) + (k.kind === 'retainer' ? '<span class="muted"> /mo</span>' : '') },
+    ],
+    fields: [
+      { k: 'client_id', l: 'Client', t: 'client', req: true, full: true },
+      { k: 'title', l: 'Contract name', req: true, full: true, hint: 'For example: Social media retainer, or Shopify store build' },
+      { k: 'kind', l: 'Type', t: 'select', opts: [['retainer','Retainer (monthly)'],['project','Once-off project']], def: 'retainer' },
+      { k: 'value', l: 'Value (R)', t: 'money', req: true, hint: 'Per month for retainers, total for projects' },
+      { k: 'start_date', l: 'Start date', t: 'date', def: todayISO() }, { k: 'end_date', l: 'End date', t: 'date' },
+      { k: 'status', l: 'Status', t: 'select', opts: ['draft','active','completed','cancelled'], def: 'active' },
+      { k: 'file_url', l: 'Link to signed contract', t: 'url', hint: 'Paste a Google Drive or Dropbox link to the PDF' },
+      { k: 'notes', l: 'Notes', t: 'textarea' },
+    ],
+  },
+  payments: {
+    title: 'Payments', one: 'payment', ep: 'payments', sub: 'Money received. Link each payment to an invoice so balances stay accurate.',
+    search: ['client_name','invoice_number','reference','method'], dateKey: 'paid_on',
+    cols: [
+      { l: 'Date', r: p => dt(p.paid_on) },
+      { l: 'Client', r: p => `<strong>${esc(p.client_name)}</strong>` },
+      { l: 'Invoice', r: p => p.invoice_number ? esc(p.invoice_number) : '<span class="muted">Not linked</span>' },
+      { l: 'Method', r: p => esc(p.method) },
+      { l: 'Reference', r: p => esc(p.reference || '') },
+      { l: 'Amount', cls: 'money', sum: 'amount', r: p => `<span class="pos">${money(p.amount)}</span>` },
+    ],
+    fields: [
+      { k: 'client_id', l: 'Client', t: 'client', req: true, full: true },
+      { k: 'invoice_id', l: 'Invoice', t: 'invoice', full: true, hint: 'Leave unlinked for deposits or prepayments; it counts as credit on the client’s account' },
+      { k: 'amount', l: 'Amount (R)', t: 'money', req: true }, { k: 'paid_on', l: 'Date received', t: 'date', def: todayISO(), req: true },
+      { k: 'method', l: 'Method', t: 'select', opts: METHODS.map(m => [m, m]), def: 'EFT' }, { k: 'reference', l: 'Reference' },
+      { k: 'notes', l: 'Notes', t: 'textarea' },
+    ],
+  },
+  credit_notes: {
+    title: 'Credit notes', one: 'credit note', ep: 'credit_notes', sub: 'Discounts, refunds and write-offs that reduce what a client owes.',
+    search: ['client_name','invoice_number','reason'], dateKey: 'issued_on',
+    cols: [
+      { l: 'Date', r: n => dt(n.issued_on) },
+      { l: 'Client', r: n => `<strong>${esc(n.client_name)}</strong>` },
+      { l: 'Invoice', r: n => n.invoice_number ? esc(n.invoice_number) : '<span class="muted">Not linked</span>' },
+      { l: 'Reason', r: n => esc(n.reason || '') },
+      { l: 'Amount', cls: 'money', sum: 'amount', r: n => money(n.amount) },
+    ],
+    fields: [
+      { k: 'client_id', l: 'Client', t: 'client', req: true, full: true },
+      { k: 'invoice_id', l: 'Invoice', t: 'invoice', full: true },
+      { k: 'amount', l: 'Amount (R)', t: 'money', req: true }, { k: 'issued_on', l: 'Date', t: 'date', def: todayISO(), req: true },
+      { k: 'reason', l: 'Reason', full: true, hint: 'For example: Loyalty discount, or Bad debt written off' },
+    ],
+  },
+  ad_spend: {
+    title: 'Ad spend', one: 'ad spend entry', ep: 'ad_spend', sub: 'Monthly ad budgets you run for clients, what the platforms charged, and your fee.',
+    search: ['client_name','platform','notes'], dateKey: 'month',
+    cols: [
+      { l: 'Month', r: a => mon(a.month) },
+      { l: 'Client', r: a => `<strong>${esc(a.client_name)}</strong>` },
+      { l: 'Platform', r: a => esc(a.platform) },
+      { l: 'Budget', cls: 'money', sum: 'budget', r: a => money(a.budget, true) },
+      { l: 'Spent', cls: 'money', sum: 'spend', r: a => money(a.spend) },
+      { l: 'Left', cls: 'money', r: a => { const left = num(a.budget) - num(a.spend); return num(a.budget) ? `<span class="${left < 0 ? 'neg' : ''}">${money(left)}</span>` : '<span class="muted">–</span>'; } },
+      { l: 'Your fee', cls: 'money', sum: 'fee', r: a => money(a.fee, true) },
+    ],
+    fields: [
+      { k: 'client_id', l: 'Client', t: 'client', req: true, full: true },
+      { k: 'month', l: 'Month', t: 'month', def: todayISO().slice(0,7), req: true },
+      { k: 'platform', l: 'Platform', t: 'select', opts: ['Meta','Google','TikTok','LinkedIn','Amazon','Other'].map(x => [x, x]), def: 'Meta' },
+      { k: 'budget', l: 'Approved budget (R)', t: 'money' }, { k: 'spend', l: 'Actual spend (R)', t: 'money', req: true },
+      { k: 'fee', l: 'Your management fee (R)', t: 'money' },
+      { k: 'notes', l: 'Notes', t: 'textarea', hint: 'Results, campaign names, anything worth remembering for the monthly report' },
+    ],
+  },
+  expenses: {
+    title: 'Expenses', one: 'expense', ep: 'expenses', sub: 'What it costs to run the business. Link a cost to a client to see job profit.',
+    search: ['category','supplier','description','client_name'], dateKey: 'spent_on', filterKey: 'category', filters: EXP_CATS,
+    cols: [
+      { l: 'Date', r: e => dt(e.spent_on) },
+      { l: 'Category', r: e => esc(e.category) },
+      { l: 'Supplier', r: e => `<strong>${esc(e.supplier || '')}</strong>` },
+      { l: 'Description', r: e => esc(e.description || '') },
+      { l: 'Client', r: e => e.client_name ? esc(e.client_name) : '<span class="muted">–</span>' },
+      { l: 'Amount', cls: 'money', sum: 'amount', r: e => money(e.amount) },
+    ],
+    fields: [
+      { k: 'spent_on', l: 'Date', t: 'date', def: todayISO(), req: true }, { k: 'amount', l: 'Amount (R)', t: 'money', req: true },
+      { k: 'category', l: 'Category', t: 'select', opts: EXP_CATS.map(x => [x, x]), def: EXP_CATS[0] }, { k: 'supplier', l: 'Supplier' },
+      { k: 'description', l: 'Description', full: true },
+      { k: 'client_id', l: 'Client', t: 'client', full: true, hint: 'Only if this cost was for a specific client job' },
+    ],
+  },
+  leads: {
+    title: 'Leads', one: 'lead', ep: 'leads', sub: 'Quote requests and enquiries from the website. Open one to see everything they asked for.',
+    search: ['name','business','email','phone','services','message','budget'], statusKey: 'status', statuses: ['new','contacted','quoted','won','lost'], dateKey: 'created_at',
+    cols: [
+      { l: 'Received', r: l => dt(l.created_at) },
+      { l: 'Name', r: l => `<strong>${esc(l.name)}</strong>${l.business ? `<div class="muted" style="font-size:13px">${esc(l.business)}</div>` : ''}` },
+      { l: 'Contact', r: l => [l.phone, l.email].filter(Boolean).map(esc).join('<br>') },
+      { l: 'Interested in', r: l => esc(l.services || '') + (l.details ? ' <span class="pill info">Quote request</span>' : '') },
+      { l: 'Budget', r: l => esc(l.budget || '') + (l.timeline ? `<div class="muted" style="font-size:13px">${esc(l.timeline)}</div>` : '') },
+      { l: 'Status', r: l => pill(l.status) },
+    ],
+    fields: [
+      { k: 'name', l: 'Name', req: true }, { k: 'business', l: 'Business' },
+      { k: 'phone', l: 'Phone', t: 'tel' }, { k: 'email', l: 'Email', t: 'email' },
+      { k: 'services', l: 'Interested in', full: true },
+      { k: 'status', l: 'Status', t: 'select', opts: ['new','contacted','quoted','won','lost'], def: 'new', full: true },
+      { k: 'message', l: 'Message', t: 'textarea' },
+    ],
+    onForm(form, lead, m) {
+      if (!lead.id) return;
+      const bar = document.createElement('div');
+      bar.className = 'full actions';
+      const wa = waNum(lead.phone);
+      bar.innerHTML = `${wa ? `<a class="btn sm" target="_blank" rel="noopener" href="https://wa.me/${wa}?text=${encodeURIComponent(`Hi ${lead.name}, thanks for contacting The House of Services. `)}">WhatsApp ${esc(lead.name.split(' ')[0])}</a>` : ''}
+        ${lead.email ? `<a class="btn sm" href="mailto:${esc(lead.email)}?subject=${encodeURIComponent('Your enquiry with The House of Services')}">Email</a>` : ''}
+        <button class="btn sm lamp" type="button" data-convert>Make client</button>`;
+      form.prepend(bar);
+      const ref = 'Q-' + String(lead.id).padStart(4, '0');
+      const det = typeof lead.details === 'string' ? JSON.parse(lead.details || 'null') : lead.details;
+      const box = document.createElement('div');
+      box.className = 'full';
+      box.innerHTML = `<div style="background:var(--bg);border-radius:10px;padding:14px 16px;font-size:14px">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:${det ? 10 : 0}px"><b>${ref}</b>
+        <span class="muted">${[lead.budget && 'Budget: ' + esc(lead.budget), lead.timeline && esc(lead.timeline), lead.contact_pref && 'Prefers ' + esc(lead.contact_pref)].filter(Boolean).join(' · ')}</span></div>
+        ${det ? Object.entries(det).map(([svc, ans]) => `<div style="margin-top:8px"><b>${esc(svc)}</b>${Object.keys(ans || {}).length ? `<ul style="margin:4px 0 0 18px">${Object.entries(ans).map(([q, a]) => `<li><span class="muted">${esc(q.replace(/\?$/, ""))}:</span> ${esc(Array.isArray(a) ? a.join(', ') : a)}</li>`).join('')}</ul>` : '<div class="muted">No details given</div>'}</div>`).join('') : ''}
+      </div>`;
+      bar.after(box);
+      $('[data-convert]', bar).addEventListener('click', async () => {
+        try {
+          const c = await A('/clients', { method: 'POST', body: { name: lead.business || lead.name, contact_person: lead.name, email: lead.email, phone: lead.phone, notes: [lead.services, lead.message].filter(Boolean).join('\n\n') } });
+          await A('/leads/' + lead.id, { method: 'PUT', body: { status: 'won' } });
+          m.close(); bust(); refreshLeadBadge(); toast('Client created from lead'); location.hash = 'client/' + c.id;
+        } catch (e) { toast(e.message, true); }
+      });
+    },
+  },
+  portfolio: {
+    title: 'Portfolio', one: 'project', ep: 'portfolio', sub: 'Projects shown in the “Recent work” section of the website. Lower order numbers show first.',
+    search: ['name','category','blurb'],
+    cols: [
+      { l: 'Order', cls: 'num', r: p => p.sort },
+      { l: 'Project', r: p => `<strong>${esc(p.name)}</strong><div class="muted" style="font-size:13px">${esc(p.blurb || '')}</div>` },
+      { l: 'Type', r: p => esc(p.category || '') },
+      { l: 'Link', r: p => p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(p.url.replace(/^https?:\/\//, ''))}</a>` : '<span class="muted">–</span>' },
+      { l: 'On website', r: p => p.visible ? pill('active').replace('Active', 'Showing') : pill('draft').replace('Draft', 'Hidden') },
+    ],
+    fields: [
+      { k: 'name', l: 'Project or client name', req: true, full: true },
+      { k: 'category', l: 'Type of work', hint: 'Website, Shopify store, Booking system, Signage…' }, { k: 'sort', l: 'Order', t: 'number', def: 10 },
+      { k: 'url', l: 'Live link', t: 'url', full: true }, { k: 'blurb', l: 'One-line description', full: true },
+      { k: 'image_url', l: 'Image link', t: 'url', full: true, hint: 'Optional screenshot or photo of the job (paste an image URL)' },
+      { k: 'visible', l: 'Show on website', t: 'checkbox', def: true, full: true },
+    ],
+  },
+};
+
+/* ================= generic list view ================= */
+async function listView(cfg) {
+  const main = $('#main');
+  main.innerHTML = `<div class="page-head"><div><h1>${cfg.title}</h1><p class="sub">${cfg.sub}</p></div><div class="actions"><button class="btn primary" data-add>Add ${cfg.one}</button></div></div>
+    <div class="toolbar">
+      <input type="search" placeholder="Search ${cfg.title.toLowerCase()}" aria-label="Search">
+      ${cfg.statusKey ? `<select data-status aria-label="Filter by status"><option value="">All statuses</option>${cfg.statuses.map(s => `<option value="${s}">${cap(s)}</option>`).join('')}</select>` : ''}
+      ${cfg.filterKey ? `<select data-filter aria-label="Filter"><option value="">All categories</option>${cfg.filters.map(s => `<option>${esc(s)}</option>`).join('')}</select>` : ''}
+      ${cfg.dateKey ? `<select data-period aria-label="Period">${PERIODS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select>` : ''}
+      <span class="count"></span>
+    </div>
+    <div class="card table-wrap"><p class="empty">Loading…</p></div>`;
+  $('[data-add]', main).addEventListener('click', () => editRecord(cfg));
+  let rows;
+  try { rows = await A('/' + cfg.ep); } catch (e) { $('.card', main).innerHTML = `<p class="empty">${esc(e.message)}</p>`; return; }
+  if (cfg.ep === 'clients') cache.clients = rows;
+  const tb = $('.toolbar', main);
+  const draw = () => {
+    const qv = $('input[type=search]', tb).value.trim().toLowerCase();
+    const st = $('[data-status]', tb)?.value, fl = $('[data-filter]', tb)?.value, pr = $('[data-period]', tb)?.value || 'all';
+    const list = rows.filter(r => (!qv || cfg.search.some(k => String(r[k] ?? '').toLowerCase().includes(qv)))
+      && (!st || r[cfg.statusKey] === st) && (!fl || r[cfg.filterKey] === fl) && (!cfg.dateKey || inPeriod(r[cfg.dateKey], pr)));
+    $('.count', tb).textContent = `${list.length} of ${rows.length}`;
+    const card = $('.card', main);
+    if (!rows.length) { card.innerHTML = `<div class="empty">No ${cfg.title.toLowerCase()} yet.<br><button class="btn primary" data-add2>Add your first ${cfg.one}</button></div>`; $('[data-add2]', card).onclick = () => editRecord(cfg); return; }
+    if (!list.length) { card.innerHTML = `<p class="empty">Nothing matches these filters. Clear the search or pick another period.</p>`; return; }
+    const sums = cfg.cols.map(c => c.sum ? list.reduce((a, r) => a + num(r[c.sum]), 0) : null);
+    const hasSum = sums.some(s => s !== null);
+    card.innerHTML = `<table class="t"><thead><tr>${cfg.cols.map(c => `<th class="${c.cls || ''}">${c.l}</th>`).join('')}</tr></thead>
+      <tbody>${list.map(r => `<tr data-id="${r.id}" tabindex="0">${cfg.cols.map(c => `<td class="${c.cls || ''}">${c.r(r)}</td>`).join('')}</tr>`).join('')}</tbody>
+      ${hasSum ? `<tfoot><tr class="static">${cfg.cols.map((c, i) => `<td class="${c.cls || ''}">${i === 0 ? 'Total' : sums[i] !== null ? money(sums[i]) : ''}</td>`).join('')}</tr></tfoot>` : ''}</table>`;
+    card.querySelectorAll('tbody tr').forEach(tr => {
+      const rec = list.find(r => String(r.id) === tr.dataset.id);
+      const go = () => cfg.open ? cfg.open(rec) : editRecord(cfg, rec);
+      tr.addEventListener('click', go);
+      tr.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+    });
+  };
+  tb.addEventListener('input', draw); tb.addEventListener('change', draw);
+  draw();
+}
+
+/* ================= invoices ================= */
+const INV_FILTERS = [['', 'All invoices'], ['open', 'Owing (unpaid, partial, overdue)'], ['overdue', 'Overdue'], ['partial', 'Partly paid'], ['unpaid', 'Unpaid'], ['paid', 'Paid'], ['draft', 'Drafts'], ['void', 'Void']];
+async function invoicesView() {
+  const main = $('#main');
+  main.innerHTML = `<div class="page-head"><div><h1>Invoices</h1><p class="sub">Create, send and track invoices. Balances update as payments come in.</p></div><div class="actions"><button class="btn primary" data-add>New invoice</button></div></div>
+    <div class="toolbar"><input type="search" placeholder="Search by number or client" aria-label="Search"><select data-st aria-label="Status">${INV_FILTERS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select><select data-period aria-label="Period">${PERIODS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select><span class="count"></span></div>
+    <div class="card table-wrap"><p class="empty">Loading…</p></div>`;
+  $('[data-add]', main).onclick = () => invoiceEditor();
+  const rows = await invoices(true);
+  const tb = $('.toolbar', main);
+  const draw = () => {
+    const qv = $('input', tb).value.trim().toLowerCase(), st = $('[data-st]', tb).value, pr = $('[data-period]', tb).value;
+    const list = rows.filter(i => (!qv || (i.number + ' ' + i.client_name).toLowerCase().includes(qv))
+      && (!st || (st === 'open' ? ['unpaid','partial','overdue'].includes(i.pay_status) : i.pay_status === st)) && inPeriod(i.issue_date, pr));
+    $('.count', tb).textContent = `${list.length} of ${rows.length}`;
+    const card = $('.card', main);
+    if (!rows.length) { card.innerHTML = `<div class="empty">No invoices yet.<br><button class="btn primary" data-add2>Create your first invoice</button></div>`; $('[data-add2]', card).onclick = () => invoiceEditor(); return; }
+    if (!list.length) { card.innerHTML = `<p class="empty">Nothing matches these filters.</p>`; return; }
+    const live = list.filter(i => !['void','draft'].includes(i.status));
+    const sum = (k) => live.reduce((a, i) => a + num(i[k]), 0);
+    card.innerHTML = `<table class="t"><thead><tr><th>Number</th><th>Client</th><th>Issued</th><th>Due</th><th>Status</th><th class="money">Total</th><th class="money">Paid</th><th class="money">Balance</th></tr></thead>
+      <tbody>${list.map(i => `<tr data-id="${i.id}" tabindex="0"><td><strong>${esc(i.number)}</strong></td><td>${esc(i.client_name)}</td><td>${dt(i.issue_date)}</td>
+        <td>${dt(i.due_date)}${i.pay_status === 'overdue' ? `<div class="neg" style="font-size:12px">${i.days_overdue} days late</div>` : ''}</td><td>${pill(i.pay_status)}</td>
+        <td class="money">${money(i.total)}</td><td class="money">${money(num(i.paid) + num(i.credited), true)}</td><td class="money"><strong class="${num(i.balance) > 0 && i.pay_status !== 'draft' && i.pay_status !== 'void' ? 'neg' : ''}">${money(i.balance, true)}</strong></td></tr>`).join('')}</tbody>
+      <tfoot><tr class="static"><td colspan="5">Total <span class="muted" style="font-weight:400">(excludes drafts and void)</span></td><td class="money">${money(sum('total'))}</td><td class="money">${money(sum('paid') + sum('credited'))}</td><td class="money">${money(sum('balance'))}</td></tr></tfoot></table>`;
+    card.querySelectorAll('tbody tr').forEach(tr => { tr.onclick = () => invoiceDetail(tr.dataset.id); tr.onkeydown = e => { if (e.key === 'Enter') invoiceDetail(tr.dataset.id); }; });
+  };
+  tb.addEventListener('input', draw); tb.addEventListener('change', draw);
+  const pre = sessionStorage.getItem('inv_filter'); if (pre) { $('[data-st]', tb).value = pre; sessionStorage.removeItem('inv_filter'); }
+  draw();
+}
+
+async function invoiceEditor(id, presets = {}) {
+  const inv = id ? await A('/invoices/' + id) : { client_id: presets.client_id || '', issue_date: todayISO(), due_date: addDays(todayISO(), 7), status: 'sent', items: [{ description: '', qty: 1, unit_price: '' }] };
+  const form = document.createElement('form');
+  form.noValidate = true;
+  form.innerHTML = `<div class="fgrid">
+      ${await fieldHTML({ k: 'client_id', l: 'Client', t: 'client', req: true }, inv.client_id)}
+      ${await fieldHTML({ k: 'contract_id', l: 'Contract', t: 'contract' }, inv.contract_id)}
+      ${await fieldHTML({ k: 'issue_date', l: 'Invoice date', t: 'date', req: true }, inv.issue_date)}
+      ${await fieldHTML({ k: 'due_date', l: 'Due date', t: 'date', req: true }, inv.due_date)}
+      ${await fieldHTML({ k: 'status', l: 'Status', t: 'select', opts: [['sent','Sent (counts towards what’s owed)'],['draft','Draft (not counted yet)'],['void','Void (cancelled)']] }, inv.status)}
+    </div>
+    <table class="items"><thead><tr><th style="width:56%">Description</th><th style="width:12%">Qty</th><th style="width:20%">Unit price (R)</th><th class="num" style="width:12%">Line total</th><th></th></tr></thead><tbody></tbody></table>
+    <button class="btn sm" type="button" data-line style="margin-top:8px">Add line</button>
+    <div class="inv-total"><span>Total</span><span data-total>R 0.00</span></div>
+    <div class="fgrid" style="margin-top:12px">${await fieldHTML({ k: 'notes', l: 'Notes on invoice', t: 'textarea' }, inv.notes)}</div>
+    <p class="form-err" hidden></p>`;
+  const tbody = $('tbody', form);
+  const addLine = (it = { description: '', qty: 1, unit_price: '' }) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><input data-k="description" value="${esc(it.description)}" placeholder="What you did" aria-label="Description"></td>
+      <td><input data-k="qty" type="number" step="0.01" min="0" value="${esc(it.qty)}" aria-label="Quantity"></td>
+      <td><input data-k="unit_price" type="number" step="0.01" min="0" inputmode="decimal" value="${esc(it.unit_price)}" aria-label="Unit price"></td>
+      <td class="num" data-lt style="padding-top:13px">–</td>
+      <td><button class="rm" type="button" aria-label="Remove line">×</button></td>`;
+    $('.rm', tr).onclick = () => { tr.remove(); if (!tbody.children.length) addLine(); calc(); };
+    tbody.appendChild(tr);
+  };
+  const lines = () => [...tbody.children].map(tr => Object.fromEntries([...tr.querySelectorAll('input')].map(i => [i.dataset.k, i.value])));
+  const calc = () => {
+    let t = 0;
+    [...tbody.children].forEach(tr => { const [d, q, p] = tr.querySelectorAll('input'); const lt = num(q.value) * num(p.value); t += lt; $('[data-lt]', tr).textContent = p.value ? money(lt) : '–'; });
+    $('[data-total]', form).textContent = money(t);
+  };
+  (inv.items || []).forEach(addLine);
+  form.addEventListener('input', calc);
+  $('[data-line]', form).onclick = () => { addLine(); tbody.lastElementChild.querySelector('input').focus(); };
+  calc();
+  const foot = document.createElement('div'); foot.style.cssText = 'display:contents';
+  foot.innerHTML = `<div class="right"><button class="btn" type="button" data-cancel>Cancel</button><button class="btn primary" type="button" data-save>${id ? 'Save invoice' : 'Create invoice'}</button></div>`;
+  const m = modal({ title: id ? 'Edit ' + inv.number : 'New invoice', body: form, foot, wide: true });
+  await wireLinkedSelects(form);
+  // choosing a contract fills an empty first line
+  form.elements.contract_id.addEventListener('change', async () => {
+    const k = (await contracts()).find(c => String(c.id) === form.elements.contract_id.value);
+    const first = tbody.firstElementChild?.querySelectorAll('input');
+    if (k && first && !first[0].value) {
+      const [y, mo] = form.elements.issue_date.value.split('-');
+      first[0].value = k.kind === 'retainer' ? `${k.title} – ${MONTHS[mo - 1]} ${y}` : k.title;
+      first[2].value = num(k.value).toFixed(2); calc();
+    }
+  });
+  $('[data-cancel]', m.el).onclick = m.close;
+  $('[data-save]', m.el).onclick = async () => {
+    const err = $('.form-err', form);
+    const body = { client_id: form.elements.client_id.value, contract_id: form.elements.contract_id.value, issue_date: form.elements.issue_date.value,
+      due_date: form.elements.due_date.value, status: form.elements.status.value, notes: form.elements.notes.value, items: lines().filter(l => l.description.trim()) };
+    if (!body.client_id) { err.hidden = false; err.textContent = 'Choose a client for this invoice.'; return; }
+    if (!body.items.length) { err.hidden = false; err.textContent = 'Add at least one line with a description.'; return; }
+    const btn = $('[data-save]', m.el); btn.disabled = true;
+    try {
+      const saved = await A('/invoices' + (id ? '/' + id : ''), { method: id ? 'PUT' : 'POST', body });
+      m.close(); bust(); toast(id ? 'Invoice saved' : `${saved.number} created`); await route(); invoiceDetail(saved.id);
+    } catch (e) { err.hidden = false; err.textContent = e.message; btn.disabled = false; }
+  };
+}
+
+async function invoiceDetail(id) {
+  const inv = await A('/invoices/' + id);
+  const wa = waNum(inv.client_phone);
+  const waMsg = `Hi ${inv.contact_person || inv.client_name}, a friendly reminder that invoice ${inv.number} has ${money(inv.balance)} outstanding${inv.pay_status === 'overdue' ? `, which was due on ${dt(inv.due_date).replace(/<[^>]+>/g,'')}` : ''}. Please use ${inv.number} as your reference. Thank you! – The House of Services`;
+  const body = `<div class="kv"><div><span>Client</span><b style="font-size:15px">${esc(inv.client_name)}</b></div><div><span>Total</span><b>${money(inv.total)}</b></div><div><span>Paid and credited</span><b>${money(num(inv.paid) + num(inv.credited))}</b></div><div><span>Balance</span><b class="${num(inv.balance) > 0 ? 'neg' : 'pos'}">${money(inv.balance)}</b></div></div>
+    <p style="margin-bottom:14px">${pill(inv.pay_status)} <span class="muted" style="margin-left:6px">Issued ${dt(inv.issue_date)} · Due ${dt(inv.due_date)}</span></p>
+    <div class="card table-wrap"><table class="t"><thead><tr><th>Description</th><th class="num">Qty</th><th class="money">Unit price</th><th class="money">Amount</th></tr></thead>
+    <tbody>${inv.items.map(i => `<tr class="static"><td>${esc(i.description)}</td><td class="num">${num(i.qty)}</td><td class="money">${money(i.unit_price)}</td><td class="money">${money(num(i.qty) * num(i.unit_price))}</td></tr>`).join('')}</tbody></table></div>
+    ${inv.payments.length || inv.credits.length ? `<h3 style="font-size:15px;margin:18px 0 8px">Payments and credits</h3><div class="card table-wrap"><table class="t"><tbody>
+      ${inv.payments.map(p => `<tr class="static"><td>${dt(p.paid_on)}</td><td>Payment · ${esc(p.method)}${p.reference ? ' · ' + esc(p.reference) : ''}</td><td class="money pos">${money(p.amount)}</td></tr>`).join('')}
+      ${inv.credits.map(c => `<tr class="static"><td>${dt(c.issued_on)}</td><td>Credit note${c.reason ? ' · ' + esc(c.reason) : ''}</td><td class="money">${money(c.amount)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+    ${inv.notes ? `<p class="muted" style="margin-top:14px;white-space:pre-wrap">${esc(inv.notes)}</p>` : ''}`;
+  const foot = document.createElement('div'); foot.style.cssText = 'display:contents';
+  foot.innerHTML = `<button class="btn danger" data-del>Delete</button><div class="right" style="flex-wrap:wrap">
+    <button class="btn" data-print>Print or save PDF</button>
+    ${wa && num(inv.balance) > 0 ? `<a class="btn" target="_blank" rel="noopener" href="https://wa.me/${wa}?text=${encodeURIComponent(waMsg)}">Send WhatsApp reminder</a>` : ''}
+    <button class="btn" data-edit>Edit</button>
+    ${num(inv.balance) > 0 && inv.status !== 'void' ? '<button class="btn" data-credit>Add credit note</button><button class="btn primary" data-pay>Record payment</button>' : ''}</div>`;
+  const m = modal({ title: inv.number, body, foot, wide: true });
+  const q = (s) => $(s, m.el);
+  q('[data-print]').onclick = () => printInvoice(inv);
+  q('[data-edit]').onclick = () => { m.close(); invoiceEditor(id); };
+  if (q('[data-pay]')) q('[data-pay]').onclick = () => { m.close(); editRecord(CFG.payments, {}, { client_id: inv.client_id, invoice_id: inv.id, amount: num(inv.balance).toFixed(2) }); };
+  if (q('[data-credit]')) q('[data-credit]').onclick = () => { m.close(); editRecord(CFG.credit_notes, {}, { client_id: inv.client_id, invoice_id: inv.id }); };
+  q('[data-del]').onclick = async () => {
+    if (!confirm(`Delete ${inv.number}? Linked payments stay on the client’s account as unallocated credit.`)) return;
+    await A('/invoices/' + id, { method: 'DELETE' }); m.close(); bust(); toast(`${inv.number} deleted`); route();
+  };
+}
+
+async function printInvoice(inv) {
+  const s = await A('/settings');
+  const w = window.open('', '_blank');
+  if (!w) { toast('Allow pop-ups for this site to print invoices.', true); return; }
+  const line = (t) => esc(t || '').replace(/\n/g, '<br>');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(inv.number)} – ${esc(inv.client_name)}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800&family=Hanken+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Hanken Grotesk",Arial,sans-serif;color:#0b1320;font-size:13px;line-height:1.5;padding:48px;max-width:860px;margin:auto}
+  .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0b1320;padding-bottom:22px}
+  .logo{display:flex;align-items:center;gap:12px}.logo b{font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:28px;line-height:1}
+  h1{font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:44px;line-height:1;text-align:right}
+  .meta{text-align:right;margin-top:6px;color:#47526a}
+  .cols{display:flex;justify-content:space-between;gap:40px;margin:26px 0}
+  .lbl{font-size:11px;font-weight:700;color:#6b7690;margin-bottom:4px}
+  table{width:100%;border-collapse:collapse;margin-top:8px}th{text-align:left;font-size:11px;color:#6b7690;padding:8px 10px;border-bottom:1.5px solid #0b1320}
+  td{padding:10px;border-bottom:1px solid #e3e7ee}.r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .tot{margin-left:auto;width:300px;margin-top:14px}.tot div{display:flex;justify-content:space-between;padding:6px 10px}
+  .tot .due{background:#0b1320;color:#fff;font-weight:700;font-size:16px;border-radius:4px;margin-top:4px}
+  .due-bar{height:6px;background:#FFC629;margin-top:-3px}
+  .bank{margin-top:34px;padding:16px 18px;background:#f3f5f8;border-left:4px solid #FFC629}
+  .foot{margin-top:28px;color:#47526a}
+  @media print{body{padding:0}@page{margin:18mm}}</style></head><body>
+  <div class="top"><div class="logo"><svg width="42" height="42" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#0b1320"/><path d="M12 30 32 13l20 17v21H12z" fill="none" stroke="#FFC629" stroke-width="5" stroke-linejoin="round"/><rect x="27" y="35" width="10" height="10" fill="#FFC629"/></svg>
+    <div><b>${esc(s.business_name || 'The House of Services')}</b><div style="color:#47526a;margin-top:4px">${line(s.address)}<br>${esc(s.phone || '')} · ${esc(s.email || '')}</div></div></div>
+    <div><h1>Invoice</h1><div class="meta"><b style="color:#0b1320">${esc(inv.number)}</b><br>Date: ${dt(inv.issue_date)}<br>Due: ${dt(inv.due_date)}</div></div></div>
+  <div class="cols"><div><div class="lbl">Bill to</div><b>${esc(inv.client_name)}</b>${inv.contact_person ? '<br>Attn: ' + esc(inv.contact_person) : ''}${inv.client_address ? '<br>' + line(inv.client_address) : ''}${inv.client_email ? '<br>' + esc(inv.client_email) : ''}</div>
+    <div style="text-align:right"><div class="lbl">Amount due</div><b style="font-size:24px">${money(inv.balance)}</b></div></div>
+  <table><thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>
+  ${inv.items.map(i => `<tr><td>${esc(i.description)}</td><td class="r">${num(i.qty)}</td><td class="r">${money(i.unit_price)}</td><td class="r">${money(num(i.qty) * num(i.unit_price))}</td></tr>`).join('')}</tbody></table>
+  <div class="tot"><div><span>Total</span><span class="r">${money(inv.total)}</span></div>
+  ${num(inv.paid) ? `<div><span>Paid</span><span class="r">−${money(inv.paid)}</span></div>` : ''}${num(inv.credited) ? `<div><span>Credits</span><span class="r">−${money(inv.credited)}</span></div>` : ''}
+  <div class="due"><span>Balance due</span><span class="r">${money(inv.balance)}</span></div><div class="due-bar"></div></div>
+  ${inv.notes ? `<p style="margin-top:22px">${line(inv.notes)}</p>` : ''}
+  <div class="bank"><div class="lbl">Banking details</div>${line(s.bank_details)}<br>Reference: <b>${esc(inv.number)}</b></div>
+  <p class="foot">${line(s.invoice_footer)}</p>
+  <script>document.fonts.ready.then(()=>setTimeout(()=>print(),200))<\/script></body></html>`);
+  w.document.close();
+}
+
+/* ================= debtors ================= */
+async function debtorsView() {
+  const main = $('#main');
+  main.innerHTML = `<div class="page-head"><div><h1>Debtors</h1><p class="sub">Who owes you, and how late it is. Ageing counts days past each invoice’s due date.</p></div></div><div class="stat-grid"></div><div class="card table-wrap"><p class="empty">Loading…</p></div>`;
+  const rows = await A('/debtors');
+  const S = (k) => rows.reduce((a, r) => a + num(r[k]), 0);
+  const late = S('d30') + S('d60') + S('d90') + S('d90plus');
+  $('.stat-grid', main).innerHTML = [
+    ['Total owed to you', money(S('balance')), `${rows.filter(r => num(r.balance) > 0).length} clients`],
+    ['Not yet due', money(S('current')), 'Within payment terms'],
+    ['Overdue', money(late), 'Past the due date', late > 0],
+    ['Over 60 days', money(S('d90') + S('d90plus')), 'Follow up or write off', S('d90') + S('d90plus') > 0],
+  ].map(([l, v, n, bad]) => `<div class="card kpi ${bad ? 'alert' : ''}"><div class="k-label">${l}</div><div class="k-val">${v}</div><div class="k-note">${n}</div></div>`).join('');
+  const card = $('.card.table-wrap', main);
+  if (!rows.length) { card.innerHTML = '<p class="empty">Nobody owes you anything right now.</p>'; return; }
+  card.innerHTML = `<table class="t"><thead><tr><th>Client</th><th class="money">Not yet due</th><th class="money">1–30 days</th><th class="money">31–60 days</th><th class="money">61–90 days</th><th class="money">90+ days</th><th class="money">Unallocated credit</th><th class="money">Balance</th><th></th></tr></thead>
+    <tbody>${rows.map(r => {
+      const wa = waNum(r.phone);
+      const msg = `Hi ${r.name}, this is a friendly reminder from The House of Services that your account has ${money(r.balance)} outstanding. Please let us know if you need a statement. Thank you!`;
+      return `<tr data-id="${r.id}" tabindex="0"><td><strong>${esc(r.name)}</strong><div class="muted" style="font-size:13px">${r.open_invoices} open invoice${r.open_invoices === 1 ? '' : 's'}</div></td>
+      <td class="money">${money(r.current, true)}</td><td class="money">${money(r.d30, true)}</td><td class="money">${money(r.d60, true)}</td><td class="money ${num(r.d90) ? 'neg' : ''}">${money(r.d90, true)}</td><td class="money ${num(r.d90plus) ? 'neg' : ''}">${money(r.d90plus, true)}</td>
+      <td class="money">${num(r.unallocated) ? '−' + money(r.unallocated) : '<span class="muted">–</span>'}</td><td class="money"><strong>${money(r.balance)}</strong></td>
+      <td>${wa && num(r.balance) > 0 ? `<a class="btn sm" target="_blank" rel="noopener" onclick="event.stopPropagation()" href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}">Remind</a>` : ''}</td></tr>`; }).join('')}</tbody>
+    <tfoot><tr class="static"><td>Total</td>${['current','d30','d60','d90','d90plus'].map(k => `<td class="money">${money(S(k))}</td>`).join('')}<td class="money">${S('unallocated') ? '−' + money(S('unallocated')) : ''}</td><td class="money">${money(S('balance'))}</td><td></td></tr></tfoot></table>`;
+  card.querySelectorAll('tbody tr').forEach(tr => { tr.onclick = () => location.hash = 'client/' + tr.dataset.id; tr.onkeydown = e => { if (e.key === 'Enter') tr.onclick(); }; });
+}
+
+/* ================= client statement ================= */
+async function clientView(id) {
+  const main = $('#main');
+  main.innerHTML = '<p class="empty">Loading…</p>';
+  const d = await A(`/clients/${id}/statement`);
+  const c = d.client, T = d.totals;
+  const wa = waNum(c.phone);
+  const mini = (title, rows, head, row, empty, addBtn) => `<div class="card section"><div class="card-h"><h2>${title}</h2>${addBtn || ''}</div>${rows.length ? `<div class="table-wrap"><table class="t"><thead><tr>${head}</tr></thead><tbody>${rows.map(row).join('')}</tbody></table></div>` : `<p class="empty" style="padding:14px 18px 20px;text-align:left">${empty}</p>`}</div>`;
+  main.innerHTML = `<a class="back" href="#clients">← All clients</a>
+    <div class="page-head"><div><h1>${esc(c.name)}</h1><div class="info-row">${pill(c.status)}${c.contact_person ? `<span>${esc(c.contact_person)}</span>` : ''}${c.phone ? `<span>${esc(c.phone)}</span>` : ''}${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ''}</div></div>
+      <div class="actions">${wa ? `<a class="btn" target="_blank" rel="noopener" href="https://wa.me/${wa}">WhatsApp</a>` : ''}<button class="btn" data-edit>Edit client</button><button class="btn" data-pay>Record payment</button><button class="btn primary" data-inv>New invoice</button></div></div>
+    <div class="stat-grid">
+      <div class="card kpi"><div class="k-label">Total billed</div><div class="k-val">${money(T.billed)}</div></div>
+      <div class="card kpi"><div class="k-label">Total paid</div><div class="k-val">${money(T.paid)}</div></div>
+      <div class="card kpi"><div class="k-label">Credits given</div><div class="k-val">${money(T.credited)}</div></div>
+      <div class="card kpi ${T.balance > 0 ? 'alert' : ''}"><div class="k-label">${T.balance < 0 ? 'In credit' : 'Balance owing'}</div><div class="k-val">${money(Math.abs(T.balance))}</div></div>
+    </div>
+    ${c.notes ? `<div class="card" style="padding:14px 18px;white-space:pre-wrap;color:var(--ink-2)">${esc(c.notes)}</div>` : ''}
+    ${mini('Contracts', d.contracts, '<th>Contract</th><th>Type</th><th>Dates</th><th>Status</th><th class="money">Value</th>',
+      k => `<tr data-k="${k.id}" tabindex="0"><td><strong>${esc(k.title)}</strong></td><td>${pill(k.kind)}</td><td>${dt(k.start_date)} to ${dt(k.end_date)}</td><td>${pill(k.status)}</td><td class="money">${money(k.value)}${k.kind === 'retainer' ? '<span class="muted"> /mo</span>' : ''}</td></tr>`,
+      'No contracts yet.', '<button data-addk>Add contract</button>')}
+    ${mini('Invoices', d.invoices, '<th>Number</th><th>Issued</th><th>Due</th><th>Status</th><th class="money">Total</th><th class="money">Balance</th>',
+      i => `<tr data-i="${i.id}" tabindex="0"><td><strong>${esc(i.number)}</strong></td><td>${dt(i.issue_date)}</td><td>${dt(i.due_date)}</td><td>${pill(i.pay_status)}</td><td class="money">${money(i.total)}</td><td class="money">${money(i.balance, true)}</td></tr>`,
+      'No invoices yet.')}
+    ${mini('Payments', d.payments, '<th>Date</th><th>Invoice</th><th>Method</th><th>Reference</th><th class="money">Amount</th>',
+      p => `<tr class="static"><td>${dt(p.paid_on)}</td><td>${p.invoice_number ? esc(p.invoice_number) : '<span class="muted">Unallocated</span>'}</td><td>${esc(p.method)}</td><td>${esc(p.reference || '')}</td><td class="money pos">${money(p.amount)}</td></tr>`,
+      'No payments recorded.')}
+    ${d.credits.length ? mini('Credit notes', d.credits, '<th>Date</th><th>Invoice</th><th>Reason</th><th class="money">Amount</th>',
+      n => `<tr class="static"><td>${dt(n.issued_on)}</td><td>${n.invoice_number ? esc(n.invoice_number) : '<span class="muted">Unallocated</span>'}</td><td>${esc(n.reason || '')}</td><td class="money">${money(n.amount)}</td></tr>`, '') : ''}
+    ${d.ad_spend.length ? mini('Ad spend', d.ad_spend, '<th>Month</th><th>Platform</th><th class="money">Budget</th><th class="money">Spent</th><th class="money">Your fee</th>',
+      a => `<tr class="static"><td>${mon(a.month)}</td><td>${esc(a.platform)}</td><td class="money">${money(a.budget, true)}</td><td class="money">${money(a.spend)}</td><td class="money">${money(a.fee, true)}</td></tr>`, '') : ''}`;
+  $('[data-edit]', main).onclick = () => editRecord(CFG.clients, c);
+  $('[data-inv]', main).onclick = () => invoiceEditor(null, { client_id: c.id });
+  $('[data-pay]', main).onclick = () => editRecord(CFG.payments, {}, { client_id: c.id });
+  $('[data-addk]', main).onclick = () => editRecord(CFG.contracts, {}, { client_id: c.id });
+  main.querySelectorAll('[data-i]').forEach(tr => tr.onclick = () => invoiceDetail(tr.dataset.i));
+  main.querySelectorAll('[data-k]').forEach(tr => tr.onclick = () => editRecord(CFG.contracts, d.contracts.find(k => String(k.id) === tr.dataset.k)));
+}
+
+/* ================= dashboard ================= */
+async function dashboardView() {
+  const main = $('#main');
+  const now = new Date();
+  main.innerHTML = `<div class="page-head"><div><h1>Dashboard</h1><p class="sub">${MONTHS[now.getMonth()]} ${now.getFullYear()} at a glance</p></div><div class="actions"><button class="btn" data-pay>Record payment</button><button class="btn primary" data-inv>New invoice</button></div></div><p class="empty">Loading…</p>`;
+  $('[data-inv]', main).onclick = () => invoiceEditor();
+  $('[data-pay]', main).onclick = () => editRecord(CFG.payments);
+  const d = await A('/dashboard');
+  const K = d.kpis;
+  const diff = K.incomeMonth - K.incomeLast;
+  const tile = (l, v, n, href, alert) => `<a class="card kpi ${alert ? 'alert' : ''}" href="${href}"><div class="k-label">${l}</div><div class="k-val">${v}</div><div class="k-note">${n}</div></a>`;
+  $('.empty', main).outerHTML = `
+    <div class="kpis">
+      ${tile('Income this month', money(K.incomeMonth), K.incomeLast ? `${diff >= 0 ? '▲' : '▼'} ${money(Math.abs(diff))} vs last month` : 'Payments received', '#payments')}
+      ${tile('Expenses this month', money(K.expMonth), 'Costs recorded', '#expenses')}
+      ${tile('Profit this month', money(K.profitMonth), 'Income minus expenses', '#expenses', K.profitMonth < 0)}
+      ${tile('Monthly retainers', money(K.mrr), 'Active retainer contracts', '#contracts')}
+      ${tile('Owed to you', money(K.outstanding), 'Open invoices, less deposits held', '#debtors')}
+      ${tile('Overdue', money(K.overdue), 'Past the due date', '#invoices/overdue', K.overdue > 0)}
+      ${tile('Client ad spend this month', money(K.adMonth), `${money(K.adFeeMonth)} in management fees`, '#ad_spend')}
+      ${tile('New leads', K.newLeads, 'From the website, not yet contacted', '#leads')}
+    </div>
+    <div class="card chart-card">
+      <div class="card-h"><h2>Income and expenses, last 12 months</h2><div style="display:flex;gap:16px;align-items:center"><div class="legend"><span><i style="background:var(--income)"></i>Income</span><span><i style="background:var(--expense)"></i>Expenses</span></div><button data-tbl>Show table</button></div></div>
+      <div class="chart" id="chart"></div>
+      <div class="table-wrap" id="chartTable" hidden><table class="t"><thead><tr><th>Month</th><th class="money">Income</th><th class="money">Expenses</th><th class="money">Profit</th><th class="money">Client ad spend</th></tr></thead>
+        <tbody>${d.series.map(s => `<tr class="static"><td>${s.label}</td><td class="money">${money(s.income)}</td><td class="money">${money(s.expenses)}</td><td class="money ${num(s.income) - num(s.expenses) < 0 ? 'neg' : ''}">${money(num(s.income) - num(s.expenses))}</td><td class="money">${money(s.ad_spend)}</td></tr>`).join('')}</tbody></table></div>
+    </div>
+    <div class="dash-grid">
+      <div class="card"><div class="card-h"><h2>Biggest balances</h2><a href="#debtors">All debtors</a></div>
+        ${d.topDebtors.length ? `<ul class="list">${d.topDebtors.map(t => `<li><div><a href="#client/${t.client_id}" style="color:inherit;font-weight:600;text-decoration:none">${esc(t.client_name)}</a><div class="sub">${t.days > 0 ? `<span class="neg">${t.days} days overdue</span>` : 'Not yet due'}</div></div><div><strong>${money(t.balance)}</strong></div></li>`).join('')}</ul>` : '<p class="empty">Nobody owes you anything right now.</p>'}</div>
+      <div class="card"><div class="card-h"><h2>Contracts ending soon</h2><a href="#contracts">All contracts</a></div>
+        ${d.ending.length ? `<ul class="list">${d.ending.map(k => `<li><div><strong>${esc(k.client_name)}</strong><div class="sub">${esc(k.title)}</div></div><div><span class="neg">${dt(k.end_date)}</span><div class="sub">${money(k.value)}${k.kind === 'retainer' ? ' /mo' : ''}</div></div></li>`).join('')}</ul>` : '<p class="empty">No contracts end in the next 45 days.</p>'}</div>
+      <div class="card"><div class="card-h"><h2>Latest payments</h2><a href="#payments">All payments</a></div>
+        ${d.recentPayments.length ? `<ul class="list">${d.recentPayments.map(p => `<li><div><strong>${esc(p.client_name)}</strong><div class="sub">${dt(p.paid_on)} · ${esc(p.method)}${p.invoice_number ? ' · ' + esc(p.invoice_number) : ''}</div></div><div class="pos"><strong>${money(p.amount)}</strong></div></li>`).join('')}</ul>` : '<p class="empty">No payments recorded yet.</p>'}</div>
+    </div>`;
+  $('[data-tbl]', main).onclick = (e) => { const t = $('#chartTable'); t.hidden = !t.hidden; $('#chart').hidden = !t.hidden; e.target.textContent = t.hidden ? 'Show table' : 'Show chart'; };
+  drawChart($('#chart'), d.series);
+}
+
+function drawChart(el, series) {
+  const W = Math.max(el.clientWidth - 36, 320), H = 260, padL = 58, padB = 28, padT = 10;
+  const max = Math.max(1, ...series.flatMap(s => [num(s.income), num(s.expenses)]));
+  const step = niceStep(max / 4), top = Math.ceil(max / step) * step;
+  const y = (v) => padT + (H - padT - padB) * (1 - v / top);
+  const band = (W - padL) / series.length, bw = Math.min(18, (band - 10) / 2);
+  let g = '';
+  for (let v = 0; v <= top + 0.001; v += step) g += `<line x1="${padL}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="${v ? '#eef0f4' : '#c9d0db'}"/><text x="${padL - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#6b7690">${moneyShort(v)}</text>`;
+  const bar = (x, v, color) => { const h = y(0) - y(v); if (h <= 0) return ''; const r = Math.min(4, h); return `<path d="M${x},${y(0)} V${y(v) + r} Q${x},${y(v)} ${x + r},${y(v)} H${x + bw - r} Q${x + bw},${y(v)} ${x + bw},${y(v) + r} V${y(0)} Z" fill="${color}"/>`; };
+  series.forEach((s, i) => {
+    const cx = padL + band * i + band / 2;
+    g += bar(cx - bw - 1, num(s.income), 'var(--income)') + bar(cx + 1, num(s.expenses), 'var(--expense)');
+    g += `<text x="${cx}" y="${H - 8}" text-anchor="middle" font-size="11" fill="#6b7690">${s.label.split(' ')[0]}</text>`;
+    g += `<rect class="hit" data-i="${i}" x="${padL + band * i}" y="${padT}" width="${band}" height="${H - padT - padB}" fill="transparent"/>`;
+  });
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Bar chart of monthly income and expenses for the last 12 months">${g}</svg><div class="tip" hidden></div>`;
+  const tip = $('.tip', el), svg = $('svg', el);
+  svg.querySelectorAll('.hit').forEach(r => {
+    r.addEventListener('mouseenter', () => {
+      const s = series[r.dataset.i];
+      const bb = r.getBoundingClientRect(), eb = el.getBoundingClientRect();
+      tip.innerHTML = `<b>${s.label}</b><span>Income <em style="font-style:normal">${money(s.income)}</em></span><span>Expenses <em style="font-style:normal">${money(s.expenses)}</em></span><span>Profit <em style="font-style:normal">${money(num(s.income) - num(s.expenses))}</em></span>`;
+      tip.hidden = false;
+      tip.style.left = Math.min(Math.max(bb.left - eb.left + bb.width / 2, 90), eb.width - 90) + 'px';
+      tip.style.top = (y(Math.max(num(s.income), num(s.expenses))) * (svg.getBoundingClientRect().height / H) + 4) + 'px';
+      r.setAttribute('fill', 'rgba(11,19,32,.04)');
+    });
+    r.addEventListener('mouseleave', () => { tip.hidden = true; r.setAttribute('fill', 'transparent'); });
+  });
+}
+function niceStep(x) { const p = Math.pow(10, Math.floor(Math.log10(x || 1))); const n = x / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
+
+/* ================= settings ================= */
+async function settingsView() {
+  const s = await A('/settings');
+  const fields = [
+    { k: 'business_name', l: 'Business name', full: true }, { k: 'phone', l: 'Phone' }, { k: 'email', l: 'Email', t: 'email' },
+    { k: 'address', l: 'Address', t: 'textarea' },
+    { k: 'bank_details', l: 'Banking details', t: 'textarea', hint: 'Printed on every invoice' },
+    { k: 'invoice_footer', l: 'Invoice footer note', t: 'textarea' },
+  ];
+  $('#main').innerHTML = `<div class="page-head"><div><h1>Settings</h1><p class="sub">Business details printed on invoices.</p></div></div>
+    <form class="card fgrid" style="padding:22px;max-width:760px" id="setForm">${(await Promise.all(fields.map(f => fieldHTML({ ...f, req: true }, s[f.k])))).join('')}
+    <div class="full"><button class="btn primary" type="submit">Save settings</button></div></form>`;
+  $('#setForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try { await A('/settings', { method: 'PUT', body: { ...s, ...readForm(e.target, fields) } }); toast('Settings saved'); } catch (err) { toast(err.message, true); }
+  });
+}
+
+/* ================= router ================= */
+async function route() {
+  const h = location.hash.slice(1) || 'dashboard';
+  const [view, arg] = h.split('/');
+  $('#app').classList.remove('menu');
+  document.querySelectorAll('.side a.nav').forEach(a => a.classList.toggle('active', a.dataset.v === (view === 'client' ? 'clients' : view)));
+  try {
+    if (view === 'dashboard') await dashboardView();
+    else if (view === 'invoices') { if (arg) sessionStorage.setItem('inv_filter', arg); await invoicesView(); }
+    else if (view === 'debtors') await debtorsView();
+    else if (view === 'client') await clientView(arg);
+    else if (view === 'settings') await settingsView();
+    else if (CFG[view]) await listView(CFG[view]);
+    else location.hash = 'dashboard';
+  } catch (e) { if (token) $('#main').innerHTML = `<p class="empty">${esc(e.message)}</p>`; }
+}
+addEventListener('hashchange', route);
+let resizeT; addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if ((location.hash || '#dashboard') === '#dashboard') route(); }, 250); });
+
+function start() { $('#login').hidden = true; $('#app').hidden = false; refreshLeadBadge(); route(); }
+token ? start() : showLogin();
+})();
+</script>
+</body>
+</html>

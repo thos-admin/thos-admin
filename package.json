@@ -1,0 +1,19 @@
+{
+  "name": "thos-website",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The House of Services — website, admin panel and API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "hash": "node -e \"console.log(require('bcryptjs').hashSync(process.argv[1], 10))\""
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.9.16",
+    "pg": "^8.13.1"
+  }
+}
