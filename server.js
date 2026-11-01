@@ -681,8 +681,8 @@ app.get('/api/admin/debtors', wrap(async (req, res) => {
          from retainer_months m where m.client_id=c.id and m.status='not_rec') as unpaid_months,
       (select max(tx_date) from transactions t where t.client_id=c.id and t.type='payment') as last_paid
     from clients c join client_balances b on b.client_id=c.id
-    where ${BAL} <> 0
-    order by ${BAL} desc`);
+    where ${BAL} <> 0 or exists (select 1 from transactions t where t.client_id=c.id)   -- paid-up clients too, for the "Paid up" filter
+    order by ${BAL} desc, lower(c.name)`);
   res.json(rows);
 }));
 
@@ -762,4 +762,58 @@ if (FRONT_DIR) {
 }
 console.log(`[static] admin: ${ADMIN_DIR || FLAT_INDEX || 'none'} | website: ${FRONT_DIR || 'none'}`);
 
-app.listen(PORT, () => console.log(`THOS running on :${PORT}`));
+// ---------- keep the database up to date (safe to run on every start) ----------
+const MIGRATION = `
+-- people who can log in besides you (salespeople only see Leads)
+create table if not exists app_users (
+  id            bigserial primary key,
+  name          text not null,
+  username      text not null unique,
+  password_hash text not null,
+  role          text not null default 'sales' check (role in ('sales')),
+  active        boolean not null default true,
+  created_at    timestamptz not null default now()
+);
+
+-- who added the lead, and when it was last touched
+alter table leads add column if not exists created_by text;
+alter table leads add column if not exists updated_at timestamptz;
+alter table leads drop constraint if exists leads_status_check;
+alter table leads add constraint leads_status_check check (status in ('new','contacted','follow_up','quoted','won','lost'));
+
+-- every action on a lead, with a timestamp: added, contacted (call / WhatsApp / email...), edited
+create table if not exists lead_activity (
+  id         bigserial primary key,
+  lead_id    bigint not null references leads(id) on delete cascade,
+  user_id    bigint references app_users(id) on delete set null,
+  user_name  text not null,
+  kind       text not null check (kind in ('created','contact','edited')),
+  how        text,
+  note       text,
+  status_to  text,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_la_lead on lead_activity(lead_id);
+create index if not exists idx_la_time on lead_activity(created_at);
+
+-- proof screenshots / photos (compressed before upload)
+create table if not exists lead_proofs (
+  id          bigserial primary key,
+  activity_id bigint not null unique references lead_activity(id) on delete cascade,
+  mime        text not null,
+  data        bytea not null,
+  created_at  timestamptz not null default now()
+);
+
+alter table app_users     enable row level security;
+alter table lead_activity enable row level security;
+alter table lead_proofs   enable row level security;
+
+alter table transactions add column if not exists imported boolean not null default false;
+`;
+async function migrate() {
+  try { await pool.query(MIGRATION); console.log('[db] tables up to date'); }
+  catch (e) { console.error('[db] could not update tables:', e.message); }
+}
+
+migrate().finally(() => app.listen(PORT, () => console.log(`THOS running on :${PORT}`)));
