@@ -496,14 +496,13 @@ const CFG = {
     fields: [
       { k: 'name', l: 'Client name', req: true, full: true },
       { k: 'billing', l: 'Type', t: 'select', opts: [['retainer','Retainer (pays monthly)'],['once_off','Once-off']], def: 'once_off' },
-      { k: 'retainer_start', l: 'First month', t: 'month', def: todayISO().slice(0, 7) },
       { k: 'retainer_active', l: 'Retainer is active', t: 'checkbox', def: true },
       { k: 'contact_person', l: 'Contact person' }, { k: 'phone', l: 'Phone', t: 'tel' },
       { k: 'email', l: 'Email', t: 'email' }, { k: 'industry', l: 'Industry' },
       { k: 'notes', l: 'Notes', t: 'textarea' },
     ],
     onForm(form) {
-      const sync = () => { const r = form.elements.billing.value === 'retainer'; ['retainer_start', 'retainer_active'].forEach(k => showField(form, k, r)); };
+      const sync = () => { const r = form.elements.billing.value === 'retainer'; ['retainer_active'].forEach(k => showField(form, k, r)); };
       form.elements.billing.addEventListener('change', sync); sync();
     },
     afterRender(card) {
@@ -848,12 +847,43 @@ async function debtorsView() {
           <td style="max-width:260px;font-size:13px" class="${r.unpaid_months ? 'neg' : 'muted'}">${esc(r.unpaid_months || '–')}</td>
           <td>${dt(r.last_paid)}</td>
           <td class="money"><strong class="${num(r.balance) < 0 ? 'pos' : ''}">${num(r.balance) < 0 ? 'In credit ' + money(-r.balance) : money(r.balance)}</strong></td>
-          <td style="white-space:nowrap">${num(r.balance) > 0 ? `<button class="btn sm" data-paid="${r.id}">Paid</button> ` : ''}${wa && num(r.balance) > 0 ? `<a class="btn sm" target="_blank" rel="noopener" onclick="event.stopPropagation()" href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}">Remind</a>` : ''}</td></tr>`; }).join('')}</tbody>
+          <td style="white-space:nowrap"><button class="btn sm" data-bal="${r.id}">Edit</button> ${num(r.balance) > 0 ? `<button class="btn sm" data-paid="${r.id}">Paid</button> ` : ''}${wa && num(r.balance) > 0 ? `<a class="btn sm" target="_blank" rel="noopener" onclick="event.stopPropagation()" href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}">Remind</a>` : ''}</td></tr>`; }).join('')}</tbody>
       <tfoot><tr class="static"><td colspan="3">Total</td><td class="money">${money(S('balance', rows))}</td><td></td></tr></tfoot></table>`;
     card.querySelectorAll('tbody tr').forEach(tr => { tr.onclick = () => location.hash = 'client/' + tr.dataset.id; tr.onkeydown = e => { if (e.key === 'Enter') tr.onclick(); }; });
+    card.querySelectorAll('[data-bal]').forEach(b => b.onclick = (e) => { e.stopPropagation(); editBalance(all.find(x => String(x.id) === b.dataset.bal), debtorsView); });
     card.querySelectorAll('[data-paid]').forEach(b => b.onclick = (e) => { e.stopPropagation(); const r = all.find(x => String(x.id) === b.dataset.paid); payFor(r.id, num(r.balance)); });
   };
   tb.addEventListener('input', draw); tb.addEventListener('change', draw); draw();
+}
+
+// Correct a balance in one step: saves the difference as an adjustment so the history stays intact.
+function editBalance(r, after) {
+  const cur = num(r.balance);
+  const body = document.createElement('form');
+  body.innerHTML = `<p style="margin:0 0 14px">Balance now: <strong>${money(cur)}</strong></p>
+    <label for="nb" style="display:block;font-weight:600;margin-bottom:6px">Correct balance (R)</label>
+    <input id="nb" inputmode="decimal" value="${cur}" style="width:100%">
+    <label for="nr" style="display:block;font-weight:600;margin:14px 0 6px">Note <span class="muted" style="font-weight:400">(optional)</span></label>
+    <input id="nr" placeholder="For example: matched to my sheet" style="width:100%">
+    <p class="muted" data-diff style="margin:12px 0 0;font-size:13px"></p>`;
+  const foot = document.createElement('div');
+  foot.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;width:100%';
+  foot.innerHTML = `<button type="button" class="btn" data-x>Cancel</button><button type="button" class="btn primary" data-ok>Save balance</button>`;
+  const M = modal({ title: 'Edit balance · ' + r.name, body, foot });
+  const nb = $('#nb', body), diff = () => (Number(String(nb.value).replace(/[^0-9.\-]/g, '')) || 0) - cur;
+  const show = () => { const d = diff(); $('[data-diff]', body).textContent = !d ? 'No change.' : d > 0 ? `Adds ${money(d)} as an amount owed.` : `Takes off ${money(-d)} as a credit.`; };
+  nb.addEventListener('input', show); show(); setTimeout(() => nb.select(), 40);
+  $('[data-x]', foot).onclick = M.close;
+  const save = async () => {
+    const d = Math.round(diff() * 100) / 100;
+    if (!d) return M.close();
+    try {
+      await A('/transactions', { method: 'POST', body: { type: d > 0 ? 'charge' : 'credit', client_id: r.id, amount: Math.abs(d), tx_date: todayISO(), description: 'Balance adjustment' + ($('#nr', body).value.trim() ? ': ' + $('#nr', body).value.trim() : ''), allocate: false } });
+      M.close(); bust(); toast(`${r.name} now owes ${money(cur + d)}`); after && after();
+    } catch (err) { toast(err.message, true); }
+  };
+  $('[data-ok]', foot).onclick = save;
+  body.addEventListener('submit', (e) => { e.preventDefault(); save(); });
 }
 
 /* ================= client page ================= */
@@ -870,10 +900,10 @@ async function clientView(id) {
   const mini = (title, rows, head, row, empty, addBtn) => `<div class="card section"><div class="card-h"><h2>${title}</h2>${addBtn || ''}</div>${rows.length ? `<div class="table-wrap"><table class="t"><thead><tr>${head}</tr></thead><tbody>${rows.map(row).join('')}</tbody></table></div>` : `<p class="empty" style="padding:14px 18px 20px;text-align:left">${empty}</p>`}</div>`;
   main.innerHTML = `<a class="back" href="#clients">← All clients</a>
     <div class="page-head"><div><h1>${esc(c.name)}</h1><div class="info-row">${c.billing === 'retainer' ? `<button class="tog ${c.retainer_active ? 'on' : 'off'}" data-toggle>${c.retainer_active ? 'Active retainer' : 'Cancelled retainer'}</button>` : '<span class="pill mute">Once-off</span>'}${c.contact_person ? `<span>${esc(c.contact_person)}</span>` : ''}${c.phone ? `<span>${esc(c.phone)}</span>` : ''}${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ''}</div></div>
-      <div class="actions">${wa ? `<a class="btn" target="_blank" rel="noopener" href="https://wa.me/${wa}">WhatsApp</a>` : ''}<button class="btn" data-edit>Edit client</button><button class="btn" data-owe>Add amount owed</button><button class="btn primary" data-pay>Record payment</button></div></div>
+      <div class="actions">${wa ? `<a class="btn" target="_blank" rel="noopener" href="https://wa.me/${wa}">WhatsApp</a>` : ''}<button class="btn" data-edit>Edit client</button><button class="btn" data-bal>Edit balance</button><button class="btn" data-owe>Add amount owed</button><button class="btn primary" data-pay>Record payment</button></div></div>
     <div class="stat-grid">
       <div class="card kpi ${bal > 0 ? 'alert' : ''}"><div class="k-label">${bal < 0 ? 'In credit' : 'Balance owing'}</div><div class="k-val">${money(Math.abs(bal))}</div></div>
-      <div class="card kpi"><div class="k-label">Client type</div><div class="k-val" style="font-size:22px">${c.billing === 'retainer' ? 'Retainer' : 'Once-off'}</div><div class="k-note">${c.billing === 'retainer' && c.retainer_start ? 'Since ' + mon(c.retainer_start) : ''}</div></div>
+      <div class="card kpi"><div class="k-label">Client type</div><div class="k-val" style="font-size:22px">${c.billing === 'retainer' ? 'Retainer' : 'Once-off'}</div><div class="k-note">${c.billing === 'retainer' && !c.retainer_active ? 'Cancelled' : ''}</div></div>
       <div class="card kpi"><div class="k-label">Unpaid months</div><div class="k-val">${unpaid}</div></div>
       <div class="card kpi"><div class="k-label">Total received</div><div class="k-val">${money(received)}</div><div class="k-note">All recorded payments</div></div>
     </div>
@@ -890,6 +920,7 @@ async function clientView(id) {
   $('[data-edit]', main).onclick = () => editRecord(CFG.clients, c);
   $('[data-pay]', main).onclick = () => payFor(c.id, 0);
   $('[data-owe]', main).onclick = () => editRecord(CFG.transactions, {}, { type: 'charge', client_id: c.id });
+  $('[data-bal]', main).onclick = () => editBalance({ id: c.id, name: c.name, balance: c.balance }, () => clientView(id));
   $('[data-addk]', main).onclick = () => editRecord(CFG.contracts, {}, { client_id: c.id });
   const tg = $('[data-toggle]', main); if (tg) tg.onclick = () => toggleRetainer(c.id);
   main.querySelectorAll('[data-t]').forEach(tr => tr.onclick = () => editRecord(CFG.transactions, d.transactions.find(t => String(t.id) === tr.dataset.t)));
