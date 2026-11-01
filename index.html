@@ -15,7 +15,7 @@
 :root{
   --night:#0b1320; --night-2:#131e33; --lamp:#FFC629;
   --bg:#f3f5f8; --card:#ffffff; --ink:#0b1320; --ink-2:#47526a; --muted:#6b7690; --line:#e3e7ee; --line-2:#d3d9e3;
-  --income:#4170c0; --expense:#b97f00; /* chart: received vs billed */
+  --income:#4170c0; --expense:#b97f00; /* chart: money in vs out */
   --good:#18794e; --good-bg:#e6f4ec; --warn:#94600a; --warn-bg:#fdf3dc; --bad:#b4232c; --bad-bg:#fde8e8; --info:#2c5aa0; --info-bg:#e7eefa; --mute-bg:#eef0f4;
   --display:"Big Shoulders Display","Arial Narrow",sans-serif; --body:"Hanken Grotesk",system-ui,sans-serif;
 }
@@ -217,6 +217,8 @@ a.kpi:hover{border-color:var(--line-2)}
 .ystrip .yl{font-weight:700;font-size:14px}
 .ystrip .ml{font-size:11px;color:var(--muted);text-align:center}
 .tx-in{color:var(--good)} .tx-out{color:var(--bad)}
+.m-only{display:none}
+@media (max-width:700px){ table.t.bank{min-width:0;width:100%} .t.bank td:last-child{white-space:nowrap} .t.bank .d-only{display:none} .t.bank .m-only{display:block} }
 @media (max-width:1100px){ .kpis,.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))} .dash-grid{grid-template-columns:1fr} }
 @media (max-width:860px){
   .app{grid-template-columns:1fr}
@@ -475,8 +477,8 @@ function inPeriod(iso, p) {
   return true;
 }
 
-const TX_TYPES = [['payment','Payment received'],['charge','Amount owed'],['credit','Credit / write-off']];
-const TX_PILL = { payment: ['good','Received'], charge: ['warn','Owed'], credit: ['info','Credit'] };
+const TX_TYPES = [['payment','Money in'],['expense','Money out'],['charge','Amount owed (bill)'],['credit','Credit / write-off']];
+const TX_PILL = { payment: ['good','In'], expense: ['mute','Out'], charge: ['warn','Bill'], credit: ['info','Credit'] };
 const txPill = (t) => `<span class="pill ${TX_PILL[t][0]}">${TX_PILL[t][1]}</span>`;
 const showField = (form, k, on) => { const el = form.elements[k]; if (el) el.closest('.f').hidden = !on; };
 
@@ -511,41 +513,53 @@ const CFG = {
     open: (c) => { location.hash = 'client/' + c.id; },
   },
   transactions: {
-    title: 'Transactions', one: 'transaction', ep: 'transactions', sub: 'Everything from day one. Click any row to edit or delete it.',
-    search: ['client_name','description','reference','method','months','billed_for'], dateKey: 'tx_date', years: true,
-    selects: [{ k: 'type', all: 'All types', opts: TX_TYPES }],
+    title: 'Transactions', one: 'transaction', ep: 'transactions', sub: 'Your bank book: money in, money out and the running total. Click any row to edit or delete it.',
+    search: ['client_name','description','reference','method','months','billed_for'], dateKey: 'tx_date', years: true, defPeriod: 'year', tableCls: 'bank',
+    prep: (rows) => rows.forEach(r => { r.book = ['payment', 'expense'].includes(r.type) ? 'bank' : 'bills'; }),
+    selects: [{ k: 'view', all: 'Everything', def: 'bank', opts: [['bank','Money in & out'],['payment','Money in only'],['expense','Money out only'],['bills','Bills & adjustments']],
+      match: (r, v) => v === 'bank' || v === 'bills' ? r.book === v : r.type === v }],
+    addPreset: (v) => ({ type: v === 'expense' ? 'expense' : v === 'bills' ? 'charge' : 'payment' }),
     cols: [
-      { l: 'Date', r: t => dt(t.tx_date) },
-      { l: 'Type', r: t => txPill(t.type) },
-      { l: 'Client', r: t => `<strong>${esc(t.client_name || '–')}</strong>` },
-      { l: 'Details', r: t => esc(t.description || '') + (t.months ? `<div class="muted" style="font-size:13px">Paid: ${esc(t.months)}</div>` : '') + (t.billed_for ? `<div class="muted" style="font-size:13px">Bill for ${esc(t.billed_for)}</div>` : '') + (t.method && t.type === 'payment' ? `<div class="muted" style="font-size:13px">${esc(t.method)}${t.reference ? ' · ' + esc(t.reference) : ''}</div>` : '') },
-      { l: 'Amount', cls: 'money', r: t => `<span class="${t.type === 'payment' ? 'tx-in' : ''}">${t.type === 'payment' ? '+' : ''}${money(t.amount)}</span>` },
+      { l: 'Date', tcls: 'd-only', r: t => `<span style="white-space:nowrap">${dt(t.tx_date)}</span>` },
+      { l: 'Details', r: t => {
+        const main = t.client_name ? `<strong>${esc(t.client_name)}</strong>${t.description ? ' · ' + esc(t.description) : ''}` : esc(t.description || '–');
+        const extra = [t.book === 'bills' ? `${txPill(t.type)} ${money(t.amount)}` : '', t.months ? 'Paid: ' + esc(t.months) : '', t.billed_for ? 'Bill for ' + esc(t.billed_for) : '',
+          t.method && t.type === 'payment' ? esc(t.method) + (t.reference ? ' · ' + esc(t.reference) : '') : ''].filter(Boolean);
+        const mob = `<div class="m-only muted" style="font-size:13px">${dt(t.tx_date)}${t.type === 'payment' ? ` · <span class="tx-in">+${money(t.amount)}</span>` : t.type === 'expense' ? ` · <span class="tx-out">−${money(t.amount)}</span>` : ''}</div>`;
+        return main + mob + (extra.length ? `<div class="muted" style="font-size:13px">${extra.join(' · ')}</div>` : '');
+      } },
+      { l: 'In', cls: 'money', tcls: 'd-only', r: t => t.type === 'payment' ? `<span class="tx-in">${money(t.amount)}</span>` : '' },
+      { l: 'Out', cls: 'money', tcls: 'd-only', r: t => t.type === 'expense' ? `<span class="tx-out">${money(t.amount)}</span>` : '' },
+      { l: 'Total', cls: 'money', r: t => t.running == null ? '<span class="muted">–</span>' : `<strong class="${num(t.running) < 0 ? 'neg' : ''}">${money(t.running)}</strong>` },
     ],
     footer(list) {
       const S = (ty) => list.filter(t => t.type === ty).reduce((a, t) => a + num(t.amount), 0);
-      return `<tr class="static"><td colspan="5" style="text-align:right;font-weight:600">
-        <span style="margin-left:22px">Received <span class="tx-in">${money(S('payment'))}</span></span>
-        <span style="margin-left:22px">Owed <span>${money(S('charge'))}</span></span>
-        <span style="margin-left:22px">Credits ${money(S('credit'))}</span></td></tr>`;
+      const inn = S('payment'), out = S('expense'), bills = S('charge'), cr = S('credit');
+      return `<tr class="static"><td class="d-only"></td><td style="font-weight:600">Total for this view${bills || cr ? `<div class="muted" style="font-size:13px;font-weight:400">Bills ${money(bills)} · Credits ${money(cr)}</div>` : ''}</td>
+        <td class="money tx-in d-only">${money(inn)}</td><td class="money tx-out d-only">${money(out)}</td>
+        <td class="money"><span class="muted" style="font-size:12px;font-weight:400">Net</span> <strong class="${inn - out < 0 ? 'neg' : ''}">${money(inn - out)}</strong></td></tr>`;
     },
     fields: [
       { k: 'type', l: 'What happened', t: 'select', opts: TX_TYPES, def: 'payment', full: true },
-      { k: 'client_id', l: 'Client', t: 'client', req: true, full: true },
+      { k: 'client_id', l: 'Client', t: 'client', full: true },
       { k: 'amount', l: 'Amount (R)', t: 'money', req: true }, { k: 'tx_date', l: 'Date', t: 'date', def: todayISO(), req: true },
       { k: 'method', l: 'Paid by', t: 'select', opts: ['EFT','Cash','Card','PayFast','Yoco','Other'].map(m => [m, m]), def: 'EFT' }, { k: 'reference', l: 'Reference' },
-      { k: 'description', l: 'Description', full: true, hint: 'For example: Logo design, Flyers x500, Shopify subscription' },
+      { k: 'description', l: 'Details', full: true, hint: 'For example: Shopify, Meta ads, Kwik Print, Logo design' },
       { k: 'allocate', l: 'Tick off their unpaid retainer months with this payment (oldest first)', t: 'checkbox', def: true, full: true },
     ],
-    title_: (isNew, v) => isNew ? ({ payment: 'Record payment', charge: 'Add amount owed', credit: 'Add credit or write-off' }[v.type] || 'Add transaction') : 'Edit transaction',
+    title_: (isNew, v) => isNew ? ({ payment: 'Money in', expense: 'Money out', charge: 'Add amount owed', credit: 'Add credit or write-off' }[v.type] || 'Add transaction') : 'Edit transaction',
     onForm(form) {
+      const lab = form.querySelector('label[for=f_client_id]');
       const sync = () => {
         const t = form.elements.type.value;
-        showField(form, 'method', t === 'payment'); showField(form, 'reference', t === 'payment');
-        showField(form, 'allocate', t === 'payment');
+        showField(form, 'client_id', t !== 'expense');
+        lab.innerHTML = t === 'payment' ? 'Client <span style="font-weight:400;color:var(--muted)">(leave empty if it\'s not a client paying)</span>' : 'Client';
+        showField(form, 'method', t === 'payment'); showField(form, 'reference', t === 'payment' || t === 'expense');
+        showField(form, 'allocate', t === 'payment' && !!form.elements.client_id.value);
       };
-      form.elements.type.addEventListener('change', sync); sync();
+      form.elements.type.addEventListener('change', sync); form.elements.client_id.addEventListener('change', sync); sync();
     },
-    prepSave: (d) => ({ ...d, method: d.type === 'payment' ? d.method : null }),
+    prepSave: (d) => ({ ...d, method: d.type === 'payment' ? d.method : null, client_id: d.type === 'expense' ? null : d.client_id }),
     savedMsg: (r, isNew) => r.ticked && r.ticked.length ? `Payment saved. Marked ${r.ticked.join(', ')} as received` : isNew ? 'Transaction saved' : 'Changes saved',
   },
   contracts: {
@@ -632,7 +646,7 @@ async function listView(cfg) {
       <span class="count"></span>
     </div>
     <div class="card table-wrap"><p class="empty">Loading…</p></div>`;
-  $('[data-add]', main).addEventListener('click', () => editRecord(cfg, {}, cfg.ep === 'transactions' && $('[data-sel="0"]', main)?.value ? { type: $('[data-sel="0"]', main).value } : {}));
+  $('[data-add]', main).addEventListener('click', () => editRecord(cfg, {}, cfg.addPreset ? cfg.addPreset($('[data-sel="0"]', main)?.value || '') : {}));
   let rows;
   try { rows = await A('/' + cfg.ep); } catch (e) { $('.card', main).innerHTML = `<p class="empty">${esc(e.message)}</p>`; return; }
   if (cfg.ep === 'clients') cache.clients = rows;
@@ -642,23 +656,25 @@ async function listView(cfg) {
   if (per) {
     const yrs = cfg.years ? [...new Set(rows.map(r => String(r[cfg.dateKey] || '').slice(0, 4)).filter(Boolean))].sort().reverse() : [];
     per.innerHTML = PERIODS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('') + yrs.map(y => `<option value="y${y}">${y}</option>`).join('');
+    if (cfg.defPeriod) per.value = cfg.defPeriod;
   }
-  try { const pre = JSON.parse(sessionStorage.getItem('preset_' + cfg.ep) || 'null'); if (pre) { sessionStorage.removeItem('preset_' + cfg.ep); Object.entries(pre).forEach(([k, v]) => { const i = (cfg.selects || []).findIndex(f => f.k === k); if (i >= 0) $(`[data-sel="${i}"]`, tb).value = v; }); } } catch {}
+  (cfg.selects || []).forEach((f, i) => { if (f.def) $(`[data-sel="${i}"]`, tb).value = f.def; });
+  try { const pre = JSON.parse(sessionStorage.getItem('preset_' + cfg.ep) || 'null'); if (pre) { sessionStorage.removeItem('preset_' + cfg.ep); Object.entries(pre).forEach(([k, v]) => { const i = (cfg.selects || []).findIndex(f => f.k === k || (f.k === 'view' && k === 'type')); if (i >= 0) $(`[data-sel="${i}"]`, tb).value = v; }); } } catch {}
   const draw = () => {
     const qv = $('input[type=search]', tb).value.trim().toLowerCase();
     const st = $('[data-status]', tb)?.value, fl = $('[data-filter]', tb)?.value, pr = $('[data-period]', tb)?.value || 'all';
     const sels = (cfg.selects || []).map((f, i) => [f.k, $(`[data-sel="${i}"]`, tb).value]);
     const list = rows.filter(r => (!qv || cfg.search.some(k => String(r[k] ?? '').toLowerCase().includes(qv)))
-      && (!st || r[cfg.statusKey] === st) && (!fl || r[cfg.filterKey] === fl) && sels.every(([k, v]) => !v || r[k] === v)
-      && (!cfg.dateKey || (pr.startsWith('y') ? String(r[cfg.dateKey]).startsWith(pr.slice(1)) : inPeriod(r[cfg.dateKey], pr))));
+      && (!st || r[cfg.statusKey] === st) && (!fl || r[cfg.filterKey] === fl) && sels.every(([k, v], i) => !v || (cfg.selects[i].match ? cfg.selects[i].match(r, v) : r[k] === v))
+      && (!cfg.dateKey || (/^y\d{4}$/.test(pr) ? String(r[cfg.dateKey]).startsWith(pr.slice(1)) : inPeriod(r[cfg.dateKey], pr))));
     $('.count', tb).textContent = `${list.length} of ${rows.length}`;
     const card = $('.card', main);
     if (!rows.length) { card.innerHTML = `<div class="empty">No ${cfg.title.toLowerCase()} yet.<br><button class="btn primary" data-add2>Add your first ${cfg.one}</button></div>`; $('[data-add2]', card).onclick = () => editRecord(cfg); return; }
     if (!list.length) { card.innerHTML = `<p class="empty">Nothing matches these filters. Clear the search or pick another period.</p>`; return; }
     const sums = cfg.cols.map(c => c.sum ? list.reduce((a, r) => a + num(r[c.sum]), 0) : null);
     const hasSum = sums.some(s => s !== null);
-    card.innerHTML = `<table class="t"><thead><tr>${cfg.cols.map(c => `<th class="${c.cls || ''}">${c.l}</th>`).join('')}</tr></thead>
-      <tbody>${list.map(r => `<tr data-id="${r.id}" tabindex="0">${cfg.cols.map(c => `<td class="${c.cls || ''}">${c.r(r)}</td>`).join('')}</tr>`).join('')}</tbody>
+    card.innerHTML = `<table class="t ${cfg.tableCls || ''}"><thead><tr>${cfg.cols.map(c => `<th class="${c.cls || ''} ${c.tcls || ''}">${c.l}</th>`).join('')}</tr></thead>
+      <tbody>${list.map(r => `<tr data-id="${r.id}" tabindex="0">${cfg.cols.map(c => `<td class="${c.cls || ''} ${c.tcls || ''}">${c.r(r)}</td>`).join('')}</tr>`).join('')}</tbody>
       ${cfg.footer ? `<tfoot>${cfg.footer(list)}</tfoot>` : hasSum ? `<tfoot><tr class="static">${cfg.cols.map((c, i) => `<td class="${c.cls || ''}">${i === 0 ? 'Total' : sums[i] !== null ? money(sums[i]) : ''}</td>`).join('')}</tr></tfoot>` : ''}</table>`;
     card.querySelectorAll('tbody tr').forEach(tr => {
       const rec = list.find(r => String(r.id) === tr.dataset.id);
@@ -933,8 +949,9 @@ async function clientView(id) {
 async function dashboardView() {
   const main = $('#main');
   const now = new Date();
-  main.innerHTML = `<div class="page-head"><div><h1>Dashboard</h1><p class="sub">${MONTHS[now.getMonth()]} ${now.getFullYear()} at a glance</p></div><div class="actions"><button class="btn" data-bill>Bill ${MONTHS[now.getMonth()]}</button><button class="btn primary" data-pay>Record payment</button></div></div><p class="empty">Loading…</p>`;
+  main.innerHTML = `<div class="page-head"><div><h1>Dashboard</h1><p class="sub">${MONTHS[now.getMonth()]} ${now.getFullYear()} at a glance</p></div><div class="actions"><button class="btn" data-out>Money out</button><button class="btn" data-bill>Bill ${MONTHS[now.getMonth()]}</button><button class="btn primary" data-pay>Money in</button></div></div><p class="empty">Loading…</p>`;
   $('[data-bill]', main).onclick = () => billModal(now.getFullYear(), now.getMonth() + 1, dashboardView);
+  $('[data-out]', main).onclick = () => editRecord(CFG.transactions, {}, { type: 'expense' });
   $('[data-pay]', main).onclick = () => editRecord(CFG.transactions, {}, { type: 'payment' });
   const d = await A('/dashboard');
   const K = d.kpis;
@@ -942,18 +959,20 @@ async function dashboardView() {
   const tile = (l, v, n, href, alert) => `<a class="card kpi ${alert ? 'alert' : ''}" href="${href}"><div class="k-label">${l}</div><div class="k-val">${v}</div><div class="k-note">${n}</div></a>`;
   $('.empty', main).outerHTML = `
     <div class="kpis">
-      ${tile('Income this month', money(K.incomeMonth), K.incomeLast ? `${diff >= 0 ? '▲' : '▼'} ${money(Math.abs(diff))} vs last month` : 'Payments received', '#transactions')}
-      ${tile('Billed this month', money(K.billedMonth), 'Amounts owed added this month', '#transactions')}
+      ${tile('Money in this month', money(K.incomeMonth), K.incomeLast ? `${diff >= 0 ? '▲' : '▼'} ${money(Math.abs(diff))} vs last month` : 'Payments received', '#transactions')}
+      ${tile('Money out this month', money(K.outMonth), 'Ads, Shopify, printing and so on', '#transactions')}
+      ${tile('Bank total', money(K.bank), 'Running total from your bank book', '#transactions', K.bank < 0)}
+      ${tile('Billed this month', money(K.billedMonth), 'Amounts owed added this month', '#retainers')}
       ${tile('Owed to you', money(K.outstanding), 'All clients', '#debtors', K.outstanding > 0)}
       ${tile('Billed, not received', money(K.notRecAmt), `${K.notRecCount} retainer month${K.notRecCount === 1 ? '' : 's'} waiting`, '#retainers')}
       ${tile('Active retainers', K.activeRet, K.unbilled ? `${K.unbilled} not billed for ${MONTHS[now.getMonth()]} yet` : 'Retainer clients', '#retainers')}
       ${tile('New leads', K.newLeads, 'From the website, not yet contacted', '#leads')}
     </div>
     <div class="card chart-card">
-      <div class="card-h"><h2>Received and billed, last 12 months</h2><div style="display:flex;gap:16px;align-items:center"><div class="legend"><span><i style="background:var(--income)"></i>Received</span><span><i style="background:var(--expense)"></i>Billed</span></div><button data-tbl>Show table</button></div></div>
+      <div class="card-h"><h2>Money in and out, last 12 months</h2><div style="display:flex;gap:16px;align-items:center"><div class="legend"><span><i style="background:var(--income)"></i>In</span><span><i style="background:var(--expense)"></i>Out</span></div><button data-tbl>Show table</button></div></div>
       <div class="chart" id="chart"></div>
-      <div class="table-wrap" id="chartTable" hidden><table class="t"><thead><tr><th>Month</th><th class="money">Received</th><th class="money">Billed</th></tr></thead>
-        <tbody>${d.series.map(s => `<tr class="static"><td>${s.label}</td><td class="money">${money(s.income)}</td><td class="money">${money(s.billed)}</td></tr>`).join('')}</tbody></table></div>
+      <div class="table-wrap" id="chartTable" hidden><table class="t"><thead><tr><th>Month</th><th class="money">In</th><th class="money">Out</th><th class="money">Net</th><th class="money">Billed</th></tr></thead>
+        <tbody>${d.series.map(s => `<tr class="static"><td>${s.label}</td><td class="money">${money(s.income)}</td><td class="money">${money(s.out)}</td><td class="money ${num(s.income) - num(s.out) < 0 ? 'neg' : ''}">${money(num(s.income) - num(s.out))}</td><td class="money">${money(s.billed)}</td></tr>`).join('')}</tbody></table></div>
     </div>
     <div class="dash-grid">
       <div class="card"><div class="card-h"><h2>Biggest balances</h2><a href="#debtors">All debtors</a></div>
@@ -969,7 +988,7 @@ async function dashboardView() {
 
 function drawChart(el, series) {
   const W = Math.max(el.clientWidth - 36, 320), H = 260, padL = 58, padB = 28, padT = 10;
-  const max = Math.max(1, ...series.flatMap(s => [num(s.income), num(s.billed)]));
+  const max = Math.max(1, ...series.flatMap(s => [num(s.income), num(s.out)]));
   const step = niceStep(max / 4), top = Math.ceil(max / step) * step;
   const y = (v) => padT + (H - padT - padB) * (1 - v / top);
   const band = (W - padL) / series.length, bw = Math.min(18, (band - 10) / 2);
@@ -978,20 +997,20 @@ function drawChart(el, series) {
   const bar = (x, v, color) => { const h = y(0) - y(v); if (h <= 0) return ''; const r = Math.min(4, h); return `<path d="M${x},${y(0)} V${y(v) + r} Q${x},${y(v)} ${x + r},${y(v)} H${x + bw - r} Q${x + bw},${y(v)} ${x + bw},${y(v) + r} V${y(0)} Z" fill="${color}"/>`; };
   series.forEach((s, i) => {
     const cx = padL + band * i + band / 2;
-    g += bar(cx - bw - 1, num(s.income), 'var(--income)') + bar(cx + 1, num(s.billed), 'var(--expense)');
+    g += bar(cx - bw - 1, num(s.income), 'var(--income)') + bar(cx + 1, num(s.out), 'var(--expense)');
     g += `<text x="${cx}" y="${H - 8}" text-anchor="middle" font-size="11" fill="#6b7690">${s.label.split(' ')[0]}</text>`;
     g += `<rect class="hit" data-i="${i}" x="${padL + band * i}" y="${padT}" width="${band}" height="${H - padT - padB}" fill="transparent"/>`;
   });
-  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Bar chart of money received and billed for the last 12 months">${g}</svg><div class="tip" hidden></div>`;
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Bar chart of money in and out for the last 12 months">${g}</svg><div class="tip" hidden></div>`;
   const tip = $('.tip', el), svg = $('svg', el);
   svg.querySelectorAll('.hit').forEach(r => {
     r.addEventListener('mouseenter', () => {
       const s = series[r.dataset.i];
       const bb = r.getBoundingClientRect(), eb = el.getBoundingClientRect();
-      tip.innerHTML = `<b>${s.label}</b><span>Received <em style="font-style:normal">${money(s.income)}</em></span><span>Billed <em style="font-style:normal">${money(s.billed)}</em></span>`;
+      tip.innerHTML = `<b>${s.label}</b><span>In <em style="font-style:normal">${money(s.income)}</em></span><span>Out <em style="font-style:normal">${money(s.out)}</em></span><span>Net <em style="font-style:normal">${money(num(s.income) - num(s.out))}</em></span>`;
       tip.hidden = false;
       tip.style.left = Math.min(Math.max(bb.left - eb.left + bb.width / 2, 90), eb.width - 90) + 'px';
-      tip.style.top = (y(Math.max(num(s.income), num(s.billed))) * (svg.getBoundingClientRect().height / H) + 4) + 'px';
+      tip.style.top = (y(Math.max(num(s.income), num(s.out))) * (svg.getBoundingClientRect().height / H) + 4) + 'px';
       r.setAttribute('fill', 'rgba(11,19,32,.04)');
     });
     r.addEventListener('mouseleave', () => { tip.hidden = true; r.setAttribute('fill', 'transparent'); });
