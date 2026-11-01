@@ -15,7 +15,7 @@
 :root{
   --night:#0b1320; --night-2:#131e33; --lamp:#FFC629;
   --bg:#f3f5f8; --card:#ffffff; --ink:#0b1320; --ink-2:#47526a; --muted:#6b7690; --line:#e3e7ee; --line-2:#d3d9e3;
-  --income:#4170c0; --expense:#b97f00;
+  --income:#4170c0; --expense:#b97f00; /* chart: received vs billed */
   --good:#18794e; --good-bg:#e6f4ec; --warn:#94600a; --warn-bg:#fdf3dc; --bad:#b4232c; --bad-bg:#fde8e8; --info:#2c5aa0; --info-bg:#e7eefa; --mute-bg:#eef0f4;
   --display:"Big Shoulders Display","Arial Narrow",sans-serif; --body:"Hanken Grotesk",system-ui,sans-serif;
 }
@@ -180,6 +180,43 @@ a.kpi:hover{border-color:var(--line-2)}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--night);color:#fff;padding:12px 18px;border-radius:8px;font-weight:600;font-size:14px;z-index:80;box-shadow:0 10px 30px rgba(0,0,0,.25)}
 .toast.err{background:var(--bad)}
 
+/* retainer grid */
+.rgrid{overflow-x:auto}
+.app > div{min-width:0}
+.rgrid table{border-collapse:separate;border-spacing:0;width:100%;font-size:14px}
+.rgrid th{font-size:12px;font-weight:600;color:var(--muted);padding:10px 4px;text-align:center;background:#fafbfc;border-bottom:1px solid var(--line);white-space:nowrap}
+.rgrid th:first-child,.rgrid td:first-child{position:sticky;left:0;z-index:1;text-align:left;background:#fff;padding:8px 14px;min-width:190px;border-right:1px solid var(--line)}
+.rgrid th:first-child{background:#fafbfc;z-index:2}
+.rgrid td{padding:4px 3px;border-bottom:1px solid var(--line);text-align:center}
+.rgrid tr.off td:first-child strong{color:var(--muted)}
+.rgrid th.now{color:var(--ink);background:#fff6d6}
+.rgrid td.now{background:#fffbeb}
+.rgrid .fee{font-size:12px;color:var(--muted);font-weight:500}
+.rgrid td.owed{white-space:nowrap;text-align:right;padding-right:14px;font-variant-numeric:tabular-nums}
+.rc{width:100%;min-width:58px;height:30px;border-radius:7px;font-size:12px;font-weight:700;border:1px solid transparent;transition:transform .1s}
+.rc:hover{box-shadow:0 0 0 2px var(--night)}
+.rc:active{transform:scale(.96)}
+.c-rec{background:#e3f3ea;color:#18794e}
+.c-x{background:#fde4e4;color:#b4232c}
+.c-na{background:transparent;color:#a3abba;font-weight:500}
+.c-up{background:#fff;border:1px dashed #d3d9e3;color:transparent}
+.legend-row{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--ink-2);margin:0 0 12px}
+.legend-row span{display:inline-flex;align-items:center;gap:6px}
+.dot{display:inline-block;width:11px;height:11px;border-radius:50%;flex:none}
+.s-rec{background:#18794e}.s-not_rec{background:#d23b3b}.s-na{background:#c3c9d4}.s-up{border:1.5px dashed #a3abba}
+.smenu{position:absolute;z-index:95;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 40px -12px rgba(11,19,32,.35);padding:6px;min-width:190px}
+.smenu button{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border-radius:8px;font-size:14px;font-weight:500;text-align:left}
+.smenu button:hover{background:var(--bg)}
+.smenu button.on{font-weight:700;background:var(--bg)}
+.smenu .hd{font-size:12px;color:var(--muted);padding:6px 10px 4px;font-weight:600}
+.tog{font-size:12px;font-weight:700;padding:4px 11px;border-radius:999px;border:1.5px solid transparent;white-space:nowrap}
+.tog.on{background:var(--good-bg);color:var(--good)}
+.tog.off{background:var(--mute-bg);color:var(--ink-2)}
+.tog:hover{border-color:currentColor}
+.ystrip{display:grid;grid-template-columns:70px repeat(12,minmax(0,1fr));gap:4px;align-items:center;padding:6px 18px}
+.ystrip .yl{font-weight:700;font-size:14px}
+.ystrip .ml{font-size:11px;color:var(--muted);text-align:center}
+.tx-in{color:var(--good)} .tx-out{color:var(--bad)}
 @media (max-width:1100px){ .kpis,.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))} .dash-grid{grid-template-columns:1fr} }
 @media (max-width:860px){
   .app{grid-template-columns:1fr}
@@ -205,7 +242,7 @@ a.kpi:hover{border-color:var(--line-2)}
     <img class="brand-logo" src="https://cdn.shopify.com/s/files/1/0613/0515/9770/files/Untitled_design_13.png?v=1723892185" alt="The House of Services" onload="this.parentElement.classList.add('has-logo')" onerror="this.remove()">
     <span class="logo-fallback"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 30 32 9l24 21v25H8z" fill="none" stroke="#FFC629" stroke-width="5" stroke-linejoin="round"/><rect x="26" y="34" width="12" height="12" fill="#FFC629"/></svg></span>
     <h1>Admin</h1>
-    <p>Log in to manage clients, invoices and payments.</p>
+    <p>Log in to manage clients, retainers and payments.</p>
     <label for="pw" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:#c5cddc">Password</label>
     <input id="pw" type="password" autocomplete="current-password" required autofocus>
     <p class="err" id="loginErr" role="alert"></p>
@@ -222,14 +259,10 @@ a.kpi:hover{border-color:var(--line-2)}
     <a class="nav" href="#contracts" data-v="contracts">Contracts</a>
     <a class="nav" href="#leads" data-v="leads">Leads <span class="badge" id="leadBadge" hidden></span></a>
     <div class="side-group">Money</div>
-    <a class="nav" href="#invoices" data-v="invoices">Invoices</a>
+    <a class="nav" href="#transactions" data-v="transactions">Transactions</a>
+    <a class="nav" href="#retainers" data-v="retainers">Retainers</a>
     <a class="nav" href="#debtors" data-v="debtors">Debtors</a>
-    <a class="nav" href="#payments" data-v="payments">Payments</a>
-    <a class="nav" href="#credit_notes" data-v="credit_notes">Credit notes</a>
-    <a class="nav" href="#ad_spend" data-v="ad_spend">Ad spend</a>
-    <a class="nav" href="#expenses" data-v="expenses">Expenses</a>
-    <div class="side-group">Website</div>
-    <a class="nav" href="#portfolio" data-v="portfolio">Portfolio</a>
+    <div class="side-group">Account</div>
     <a class="nav" href="#settings" data-v="settings">Settings</a>
     <div class="side-foot">
       <a href="/" target="_blank" rel="noopener">View website</a>
@@ -313,9 +346,8 @@ $('#menuBtn').addEventListener('click', () => $('#app').classList.toggle('menu')
 
 /* ================= data helpers ================= */
 async function clients(force) { if (force || !cache.clients) cache.clients = await A('/clients'); return cache.clients; }
-async function invoices(force) { if (force || !cache.invoices) cache.invoices = await A('/invoices'); return cache.invoices; }
 async function contracts(force) { if (force || !cache.contracts) cache.contracts = await A('/contracts'); return cache.contracts; }
-const bust = () => { delete cache.clients; delete cache.invoices; delete cache.contracts; };
+const bust = () => { delete cache.clients; delete cache.contracts; };
 async function refreshLeadBadge() {
   try { const l = await A('/leads'); const n = l.filter(x => x.status === 'new').length; const b = $('#leadBadge'); b.hidden = !n; b.textContent = n; } catch {}
 }
@@ -353,7 +385,6 @@ async function fieldHTML(f, val) {
       input = `<select id="${id}" name="${f.k}"${req}><option value="">${f.req ? 'Choose a client' : 'Not linked to a client'}</option>${cs.map(c => `<option value="${c.id}"${String(c.id) === String(v) ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select>`;
       break;
     }
-    case 'invoice': input = `<select id="${id}" name="${f.k}" data-val="${esc(v)}"><option value="">Not linked to an invoice</option></select>`; break;
     case 'contract': input = `<select id="${id}" name="${f.k}" data-val="${esc(v)}"><option value="">Not linked to a contract</option></select>`; break;
     case 'money': input = `<input id="${id}" name="${f.k}" type="number" step="0.01" min="0" inputmode="decimal" value="${esc(v)}"${req}>`; break;
     case 'number': input = `<input id="${id}" name="${f.k}" type="number" step="1" value="${esc(v)}"${req}>`; break;
@@ -365,33 +396,17 @@ async function fieldHTML(f, val) {
   return `<div class="f ${f.full || f.t === 'textarea' ? 'full' : ''}"><label for="${id}">${esc(f.l)}${f.req || f.t === 'select' ? '' : ' <span style="font-weight:400;color:var(--muted)">(optional)</span>'}</label>${input}${f.hint ? `<span class="hint">${esc(f.hint)}</span>` : ''}</div>`;
 }
 
-// Fill invoice/contract selects based on the chosen client
+// Fill the contract select based on the chosen client
 async function wireLinkedSelects(form) {
   const cSel = form.querySelector('[name=client_id]');
-  const iSel = form.querySelector('select[name=invoice_id]');
   const kSel = form.querySelector('select[name=contract_id]');
-  if (!cSel || (!iSel && !kSel)) return;
-  const [invs, cons] = await Promise.all([iSel ? invoices(true) : [], kSel ? contracts() : []]);
+  if (!cSel || !kSel) return;
+  const cons = await contracts();
   const fill = () => {
-    const cid = cSel.value;
-    if (iSel) {
-      const keep = iSel.value || iSel.dataset.val;
-      const list = invs.filter(i => String(i.client_id) === cid && i.status !== 'void' && (num(i.balance) > 0 || String(i.id) === String(keep)));
-      iSel.innerHTML = `<option value="">Not linked to an invoice</option>` + list.map(i => `<option value="${i.id}" data-bal="${i.balance}"${String(i.id) === String(keep) ? ' selected' : ''}>${esc(i.number)} · ${money(i.balance)} owing</option>`).join('');
-    }
-    if (kSel) {
-      const keep = kSel.value || kSel.dataset.val;
-      const list = cons.filter(k => String(k.client_id) === cid);
-      kSel.innerHTML = `<option value="">Not linked to a contract</option>` + list.map(k => `<option value="${k.id}"${String(k.id) === String(keep) ? ' selected' : ''}>${esc(k.title)}</option>`).join('');
-    }
+    const keep = kSel.value || kSel.dataset.val;
+    kSel.innerHTML = `<option value="">Not linked to a contract</option>` + cons.filter(k => String(k.client_id) === cSel.value).map(k => `<option value="${k.id}"${String(k.id) === String(keep) ? ' selected' : ''}>${esc(k.title)}</option>`).join('');
   };
   cSel.addEventListener('change', fill); fill();
-  // Pick an invoice → prefill the amount with what's owing
-  if (iSel) iSel.addEventListener('change', () => {
-    const amt = form.querySelector('[name=amount]');
-    const bal = iSel.selectedOptions[0]?.dataset.bal;
-    if (amt && bal && !amt.value) amt.value = num(bal).toFixed(2);
-  });
 }
 
 function readForm(form, fields) {
@@ -415,7 +430,7 @@ async function editRecord(cfg, rec = {}, presets = {}) {
   const foot = document.createElement('div');
   foot.style.cssText = 'display:contents';
   foot.innerHTML = `${!isNew ? '<button class="btn danger" type="button" data-del>Delete</button>' : ''}<div class="right"><button class="btn" type="button" data-cancel>Cancel</button><button class="btn primary" type="button" data-save>${isNew ? 'Add ' + cfg.one : 'Save changes'}</button></div>`;
-  const m = modal({ title: (isNew ? 'Add ' : 'Edit ') + cfg.one, body: form, foot });
+  const m = modal({ title: cfg.title_ ? cfg.title_(isNew, vals) : (isNew ? 'Add ' : 'Edit ') + cfg.one, body: form, foot });
   await wireLinkedSelects(form);
   if (cfg.onForm) cfg.onForm(form, rec, m);
   const errEl = form.querySelector('.form-err');
@@ -425,8 +440,8 @@ async function editRecord(cfg, rec = {}, presets = {}) {
     if (missing) { errEl.hidden = false; errEl.textContent = `Add ${missing.l.toLowerCase()} before saving.`; form.elements[missing.k].focus(); return; }
     const btn = $('[data-save]', m.el); btn.disabled = true;
     try {
-      await A(`/${cfg.ep}${isNew ? '' : '/' + rec.id}`, { method: isNew ? 'POST' : 'PUT', body: data });
-      m.close(); bust(); toast(isNew ? `${cap(cfg.one)} added` : 'Changes saved'); route();
+      const saved = await A(`/${cfg.ep}${isNew ? '' : '/' + rec.id}`, { method: isNew ? 'POST' : 'PUT', body: cfg.prepSave ? cfg.prepSave(data) : data });
+      m.close(); bust(); toast(cfg.savedMsg ? cfg.savedMsg(saved, isNew) : isNew ? `${cap(cfg.one)} added` : 'Changes saved'); route();
       if (cfg.ep === 'leads') refreshLeadBadge();
     } catch (e) { errEl.hidden = false; errEl.textContent = e.message; btn.disabled = false; }
   };
@@ -460,25 +475,79 @@ function inPeriod(iso, p) {
   return true;
 }
 
+const TX_TYPES = [['payment','Payment received'],['charge','Amount owed'],['credit','Credit / write-off']];
+const TX_PILL = { payment: ['good','Received'], charge: ['warn','Owed'], credit: ['info','Credit'] };
+const txPill = (t) => `<span class="pill ${TX_PILL[t][0]}">${TX_PILL[t][1]}</span>`;
+const showField = (form, k, on) => { const el = form.elements[k]; if (el) el.closest('.f').hidden = !on; };
+
 const CFG = {
   clients: {
-    title: 'Clients', one: 'client', ep: 'clients', sub: 'Everyone you bill, with what they owe right now.',
-    search: ['name','contact_person','email','phone','industry'], statusKey: 'status', statuses: ['active','paused','ended'],
+    title: 'Clients', one: 'client', ep: 'clients', sub: 'Everyone you work with. Retainers can be switched between active and cancelled right here.',
+    search: ['name','contact_person','email','phone','industry','notes'],
+    prep: (rows) => rows.forEach(r => { r.state = r.billing === 'retainer' ? (r.retainer_active ? 'active' : 'cancelled') : 'once_off'; }),
+    selects: [{ k: 'state', all: 'All clients', opts: [['active','Active retainers'],['cancelled','Cancelled retainers'],['once_off','Once-off clients']] }],
     cols: [
-      { l: 'Client', r: c => `<strong>${esc(c.name)}</strong>${c.industry ? `<div class="muted" style="font-size:13px">${esc(c.industry)}</div>` : ''}` },
-      { l: 'Contact', r: c => esc(c.contact_person || '') + (c.phone ? `<div class="muted" style="font-size:13px">${esc(c.phone)}</div>` : '') },
-      { l: 'Status', r: c => pill(c.status) },
-      { l: 'Active contracts', cls: 'num', r: c => c.active_contracts || '<span class="muted">–</span>' },
+      { l: 'Client', r: c => `<strong>${esc(c.name)}</strong>${c.notes ? `<div class="muted" style="font-size:13px">${esc(c.notes.split('\n')[0]).slice(0, 60)}</div>` : ''}` },
+      { l: 'Type', r: c => c.billing === 'retainer' ? 'Retainer' : '<span class="muted">Once-off</span>' },
+      { l: 'Retainer', r: c => c.billing === 'retainer' ? `<button class="tog ${c.retainer_active ? 'on' : 'off'}" data-toggle="${c.id}" title="Click to change">${c.retainer_active ? 'Active' : 'Cancelled'}</button>` : '<span class="muted">–</span>' },
+      { l: 'Unpaid months', cls: 'num', r: c => c.months_unpaid ? `<span class="neg">${c.months_unpaid}</span>` : '<span class="muted">–</span>' },
       { l: 'Balance owing', cls: 'money', sum: 'balance', r: c => `<span class="${num(c.balance) > 0 ? 'neg' : ''}">${money(c.balance, true)}</span>` },
     ],
     fields: [
-      { k: 'name', l: 'Business name', req: true, full: true },
+      { k: 'name', l: 'Client name', req: true, full: true },
+      { k: 'billing', l: 'Type', t: 'select', opts: [['retainer','Retainer (pays monthly)'],['once_off','Once-off']], def: 'once_off' },
+      { k: 'retainer_start', l: 'First month', t: 'month', def: todayISO().slice(0, 7) },
+      { k: 'retainer_active', l: 'Retainer is active', t: 'checkbox', def: true },
       { k: 'contact_person', l: 'Contact person' }, { k: 'phone', l: 'Phone', t: 'tel' },
       { k: 'email', l: 'Email', t: 'email' }, { k: 'industry', l: 'Industry' },
-      { k: 'status', l: 'Status', t: 'select', opts: ['active','paused','ended'], def: 'active' },
-      { k: 'address', l: 'Billing address', t: 'textarea' }, { k: 'notes', l: 'Notes', t: 'textarea' },
+      { k: 'notes', l: 'Notes', t: 'textarea' },
     ],
+    onForm(form) {
+      const sync = () => { const r = form.elements.billing.value === 'retainer'; ['retainer_start', 'retainer_active'].forEach(k => showField(form, k, r)); };
+      form.elements.billing.addEventListener('change', sync); sync();
+    },
+    afterRender(card) {
+      card.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); toggleRetainer(b.dataset.toggle); }));
+    },
     open: (c) => { location.hash = 'client/' + c.id; },
+  },
+  transactions: {
+    title: 'Transactions', one: 'transaction', ep: 'transactions', sub: 'Everything from day one. Click any row to edit or delete it.',
+    search: ['client_name','description','reference','method','months','billed_for'], dateKey: 'tx_date', years: true,
+    selects: [{ k: 'type', all: 'All types', opts: TX_TYPES }],
+    cols: [
+      { l: 'Date', r: t => dt(t.tx_date) },
+      { l: 'Type', r: t => txPill(t.type) },
+      { l: 'Client', r: t => `<strong>${esc(t.client_name || '–')}</strong>` },
+      { l: 'Details', r: t => esc(t.description || '') + (t.months ? `<div class="muted" style="font-size:13px">Paid: ${esc(t.months)}</div>` : '') + (t.billed_for ? `<div class="muted" style="font-size:13px">Bill for ${esc(t.billed_for)}</div>` : '') + (t.method && t.type === 'payment' ? `<div class="muted" style="font-size:13px">${esc(t.method)}${t.reference ? ' · ' + esc(t.reference) : ''}</div>` : '') },
+      { l: 'Amount', cls: 'money', r: t => `<span class="${t.type === 'payment' ? 'tx-in' : ''}">${t.type === 'payment' ? '+' : ''}${money(t.amount)}</span>` },
+    ],
+    footer(list) {
+      const S = (ty) => list.filter(t => t.type === ty).reduce((a, t) => a + num(t.amount), 0);
+      return `<tr class="static"><td colspan="5" style="text-align:right;font-weight:600">
+        <span style="margin-left:22px">Received <span class="tx-in">${money(S('payment'))}</span></span>
+        <span style="margin-left:22px">Owed <span>${money(S('charge'))}</span></span>
+        <span style="margin-left:22px">Credits ${money(S('credit'))}</span></td></tr>`;
+    },
+    fields: [
+      { k: 'type', l: 'What happened', t: 'select', opts: TX_TYPES, def: 'payment', full: true },
+      { k: 'client_id', l: 'Client', t: 'client', req: true, full: true },
+      { k: 'amount', l: 'Amount (R)', t: 'money', req: true }, { k: 'tx_date', l: 'Date', t: 'date', def: todayISO(), req: true },
+      { k: 'method', l: 'Paid by', t: 'select', opts: ['EFT','Cash','Card','PayFast','Yoco','Other'].map(m => [m, m]), def: 'EFT' }, { k: 'reference', l: 'Reference' },
+      { k: 'description', l: 'Description', full: true, hint: 'For example: Logo design, Flyers x500, Shopify subscription' },
+      { k: 'allocate', l: 'Tick off their unpaid retainer months with this payment (oldest first)', t: 'checkbox', def: true, full: true },
+    ],
+    title_: (isNew, v) => isNew ? ({ payment: 'Record payment', charge: 'Add amount owed', credit: 'Add credit or write-off' }[v.type] || 'Add transaction') : 'Edit transaction',
+    onForm(form) {
+      const sync = () => {
+        const t = form.elements.type.value;
+        showField(form, 'method', t === 'payment'); showField(form, 'reference', t === 'payment');
+        showField(form, 'allocate', t === 'payment');
+      };
+      form.elements.type.addEventListener('change', sync); sync();
+    },
+    prepSave: (d) => ({ ...d, method: d.type === 'payment' ? d.method : null }),
+    savedMsg: (r, isNew) => r.ticked && r.ticked.length ? `Payment saved. Marked ${r.ticked.join(', ')} as received` : isNew ? 'Transaction saved' : 'Changes saved',
   },
   contracts: {
     title: 'Contracts', one: 'contract', ep: 'contracts', sub: 'Retainers and project agreements, with renewal dates.',
@@ -501,81 +570,6 @@ const CFG = {
       { k: 'status', l: 'Status', t: 'select', opts: ['draft','active','completed','cancelled'], def: 'active' },
       { k: 'file_url', l: 'Link to signed contract', t: 'url', hint: 'Paste a Google Drive or Dropbox link to the PDF' },
       { k: 'notes', l: 'Notes', t: 'textarea' },
-    ],
-  },
-  payments: {
-    title: 'Payments', one: 'payment', ep: 'payments', sub: 'Money received. Link each payment to an invoice so balances stay accurate.',
-    search: ['client_name','invoice_number','reference','method'], dateKey: 'paid_on',
-    cols: [
-      { l: 'Date', r: p => dt(p.paid_on) },
-      { l: 'Client', r: p => `<strong>${esc(p.client_name)}</strong>` },
-      { l: 'Invoice', r: p => p.invoice_number ? esc(p.invoice_number) : '<span class="muted">Not linked</span>' },
-      { l: 'Method', r: p => esc(p.method) },
-      { l: 'Reference', r: p => esc(p.reference || '') },
-      { l: 'Amount', cls: 'money', sum: 'amount', r: p => `<span class="pos">${money(p.amount)}</span>` },
-    ],
-    fields: [
-      { k: 'client_id', l: 'Client', t: 'client', req: true, full: true },
-      { k: 'invoice_id', l: 'Invoice', t: 'invoice', full: true, hint: 'Leave unlinked for deposits or prepayments; it counts as credit on the client’s account' },
-      { k: 'amount', l: 'Amount (R)', t: 'money', req: true }, { k: 'paid_on', l: 'Date received', t: 'date', def: todayISO(), req: true },
-      { k: 'method', l: 'Method', t: 'select', opts: METHODS.map(m => [m, m]), def: 'EFT' }, { k: 'reference', l: 'Reference' },
-      { k: 'notes', l: 'Notes', t: 'textarea' },
-    ],
-  },
-  credit_notes: {
-    title: 'Credit notes', one: 'credit note', ep: 'credit_notes', sub: 'Discounts, refunds and write-offs that reduce what a client owes.',
-    search: ['client_name','invoice_number','reason'], dateKey: 'issued_on',
-    cols: [
-      { l: 'Date', r: n => dt(n.issued_on) },
-      { l: 'Client', r: n => `<strong>${esc(n.client_name)}</strong>` },
-      { l: 'Invoice', r: n => n.invoice_number ? esc(n.invoice_number) : '<span class="muted">Not linked</span>' },
-      { l: 'Reason', r: n => esc(n.reason || '') },
-      { l: 'Amount', cls: 'money', sum: 'amount', r: n => money(n.amount) },
-    ],
-    fields: [
-      { k: 'client_id', l: 'Client', t: 'client', req: true, full: true },
-      { k: 'invoice_id', l: 'Invoice', t: 'invoice', full: true },
-      { k: 'amount', l: 'Amount (R)', t: 'money', req: true }, { k: 'issued_on', l: 'Date', t: 'date', def: todayISO(), req: true },
-      { k: 'reason', l: 'Reason', full: true, hint: 'For example: Loyalty discount, or Bad debt written off' },
-    ],
-  },
-  ad_spend: {
-    title: 'Ad spend', one: 'ad spend entry', ep: 'ad_spend', sub: 'Monthly ad budgets you run for clients, what the platforms charged, and your fee.',
-    search: ['client_name','platform','notes'], dateKey: 'month',
-    cols: [
-      { l: 'Month', r: a => mon(a.month) },
-      { l: 'Client', r: a => `<strong>${esc(a.client_name)}</strong>` },
-      { l: 'Platform', r: a => esc(a.platform) },
-      { l: 'Budget', cls: 'money', sum: 'budget', r: a => money(a.budget, true) },
-      { l: 'Spent', cls: 'money', sum: 'spend', r: a => money(a.spend) },
-      { l: 'Left', cls: 'money', r: a => { const left = num(a.budget) - num(a.spend); return num(a.budget) ? `<span class="${left < 0 ? 'neg' : ''}">${money(left)}</span>` : '<span class="muted">–</span>'; } },
-      { l: 'Your fee', cls: 'money', sum: 'fee', r: a => money(a.fee, true) },
-    ],
-    fields: [
-      { k: 'client_id', l: 'Client', t: 'client', req: true, full: true },
-      { k: 'month', l: 'Month', t: 'month', def: todayISO().slice(0,7), req: true },
-      { k: 'platform', l: 'Platform', t: 'select', opts: ['Meta','Google','TikTok','LinkedIn','Amazon','Other'].map(x => [x, x]), def: 'Meta' },
-      { k: 'budget', l: 'Approved budget (R)', t: 'money' }, { k: 'spend', l: 'Actual spend (R)', t: 'money', req: true },
-      { k: 'fee', l: 'Your management fee (R)', t: 'money' },
-      { k: 'notes', l: 'Notes', t: 'textarea', hint: 'Results, campaign names, anything worth remembering for the monthly report' },
-    ],
-  },
-  expenses: {
-    title: 'Expenses', one: 'expense', ep: 'expenses', sub: 'What it costs to run the business. Link a cost to a client to see job profit.',
-    search: ['category','supplier','description','client_name'], dateKey: 'spent_on', filterKey: 'category', filters: EXP_CATS,
-    cols: [
-      { l: 'Date', r: e => dt(e.spent_on) },
-      { l: 'Category', r: e => esc(e.category) },
-      { l: 'Supplier', r: e => `<strong>${esc(e.supplier || '')}</strong>` },
-      { l: 'Description', r: e => esc(e.description || '') },
-      { l: 'Client', r: e => e.client_name ? esc(e.client_name) : '<span class="muted">–</span>' },
-      { l: 'Amount', cls: 'money', sum: 'amount', r: e => money(e.amount) },
-    ],
-    fields: [
-      { k: 'spent_on', l: 'Date', t: 'date', def: todayISO(), req: true }, { k: 'amount', l: 'Amount (R)', t: 'money', req: true },
-      { k: 'category', l: 'Category', t: 'select', opts: EXP_CATS.map(x => [x, x]), def: EXP_CATS[0] }, { k: 'supplier', l: 'Supplier' },
-      { k: 'description', l: 'Description', full: true },
-      { k: 'client_id', l: 'Client', t: 'client', full: true, hint: 'Only if this cost was for a specific client job' },
     ],
   },
   leads: {
@@ -624,24 +618,6 @@ const CFG = {
       });
     },
   },
-  portfolio: {
-    title: 'Portfolio', one: 'project', ep: 'portfolio', sub: 'Projects shown in the “Recent work” section of the website. Lower order numbers show first.',
-    search: ['name','category','blurb'],
-    cols: [
-      { l: 'Order', cls: 'num', r: p => p.sort },
-      { l: 'Project', r: p => `<strong>${esc(p.name)}</strong><div class="muted" style="font-size:13px">${esc(p.blurb || '')}</div>` },
-      { l: 'Type', r: p => esc(p.category || '') },
-      { l: 'Link', r: p => p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(p.url.replace(/^https?:\/\//, ''))}</a>` : '<span class="muted">–</span>' },
-      { l: 'On website', r: p => p.visible ? pill('active').replace('Active', 'Showing') : pill('draft').replace('Draft', 'Hidden') },
-    ],
-    fields: [
-      { k: 'name', l: 'Project or client name', req: true, full: true },
-      { k: 'category', l: 'Type of work', hint: 'Website, Shopify store, Booking system, Signage…' }, { k: 'sort', l: 'Order', t: 'number', def: 10 },
-      { k: 'url', l: 'Live link', t: 'url', full: true }, { k: 'blurb', l: 'One-line description', full: true },
-      { k: 'image_url', l: 'Image link', t: 'url', full: true, hint: 'Optional screenshot or photo of the job (paste an image URL)' },
-      { k: 'visible', l: 'Show on website', t: 'checkbox', def: true, full: true },
-    ],
-  },
 };
 
 /* ================= generic list view ================= */
@@ -652,20 +628,30 @@ async function listView(cfg) {
       <input type="search" placeholder="Search ${cfg.title.toLowerCase()}" aria-label="Search">
       ${cfg.statusKey ? `<select data-status aria-label="Filter by status"><option value="">All statuses</option>${cfg.statuses.map(s => `<option value="${s}">${cap(s)}</option>`).join('')}</select>` : ''}
       ${cfg.filterKey ? `<select data-filter aria-label="Filter"><option value="">All categories</option>${cfg.filters.map(s => `<option>${esc(s)}</option>`).join('')}</select>` : ''}
-      ${cfg.dateKey ? `<select data-period aria-label="Period">${PERIODS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select>` : ''}
+      ${(cfg.selects || []).map((f, i) => `<select data-sel="${i}" aria-label="Filter"><option value="">${f.all}</option>${f.opts.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}</select>`).join('')}
+      ${cfg.dateKey ? `<select data-period aria-label="Period"></select>` : ''}
       <span class="count"></span>
     </div>
     <div class="card table-wrap"><p class="empty">Loading…</p></div>`;
-  $('[data-add]', main).addEventListener('click', () => editRecord(cfg));
+  $('[data-add]', main).addEventListener('click', () => editRecord(cfg, {}, cfg.ep === 'transactions' && $('[data-sel="0"]', main)?.value ? { type: $('[data-sel="0"]', main).value } : {}));
   let rows;
   try { rows = await A('/' + cfg.ep); } catch (e) { $('.card', main).innerHTML = `<p class="empty">${esc(e.message)}</p>`; return; }
   if (cfg.ep === 'clients') cache.clients = rows;
+  if (cfg.prep) cfg.prep(rows);
   const tb = $('.toolbar', main);
+  const per = $('[data-period]', tb);
+  if (per) {
+    const yrs = cfg.years ? [...new Set(rows.map(r => String(r[cfg.dateKey] || '').slice(0, 4)).filter(Boolean))].sort().reverse() : [];
+    per.innerHTML = PERIODS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('') + yrs.map(y => `<option value="y${y}">${y}</option>`).join('');
+  }
+  try { const pre = JSON.parse(sessionStorage.getItem('preset_' + cfg.ep) || 'null'); if (pre) { sessionStorage.removeItem('preset_' + cfg.ep); Object.entries(pre).forEach(([k, v]) => { const i = (cfg.selects || []).findIndex(f => f.k === k); if (i >= 0) $(`[data-sel="${i}"]`, tb).value = v; }); } } catch {}
   const draw = () => {
     const qv = $('input[type=search]', tb).value.trim().toLowerCase();
     const st = $('[data-status]', tb)?.value, fl = $('[data-filter]', tb)?.value, pr = $('[data-period]', tb)?.value || 'all';
+    const sels = (cfg.selects || []).map((f, i) => [f.k, $(`[data-sel="${i}"]`, tb).value]);
     const list = rows.filter(r => (!qv || cfg.search.some(k => String(r[k] ?? '').toLowerCase().includes(qv)))
-      && (!st || r[cfg.statusKey] === st) && (!fl || r[cfg.filterKey] === fl) && (!cfg.dateKey || inPeriod(r[cfg.dateKey], pr)));
+      && (!st || r[cfg.statusKey] === st) && (!fl || r[cfg.filterKey] === fl) && sels.every(([k, v]) => !v || r[k] === v)
+      && (!cfg.dateKey || (pr.startsWith('y') ? String(r[cfg.dateKey]).startsWith(pr.slice(1)) : inPeriod(r[cfg.dateKey], pr))));
     $('.count', tb).textContent = `${list.length} of ${rows.length}`;
     const card = $('.card', main);
     if (!rows.length) { card.innerHTML = `<div class="empty">No ${cfg.title.toLowerCase()} yet.<br><button class="btn primary" data-add2>Add your first ${cfg.one}</button></div>`; $('[data-add2]', card).onclick = () => editRecord(cfg); return; }
@@ -674,286 +660,277 @@ async function listView(cfg) {
     const hasSum = sums.some(s => s !== null);
     card.innerHTML = `<table class="t"><thead><tr>${cfg.cols.map(c => `<th class="${c.cls || ''}">${c.l}</th>`).join('')}</tr></thead>
       <tbody>${list.map(r => `<tr data-id="${r.id}" tabindex="0">${cfg.cols.map(c => `<td class="${c.cls || ''}">${c.r(r)}</td>`).join('')}</tr>`).join('')}</tbody>
-      ${hasSum ? `<tfoot><tr class="static">${cfg.cols.map((c, i) => `<td class="${c.cls || ''}">${i === 0 ? 'Total' : sums[i] !== null ? money(sums[i]) : ''}</td>`).join('')}</tr></tfoot>` : ''}</table>`;
+      ${cfg.footer ? `<tfoot>${cfg.footer(list)}</tfoot>` : hasSum ? `<tfoot><tr class="static">${cfg.cols.map((c, i) => `<td class="${c.cls || ''}">${i === 0 ? 'Total' : sums[i] !== null ? money(sums[i]) : ''}</td>`).join('')}</tr></tfoot>` : ''}</table>`;
     card.querySelectorAll('tbody tr').forEach(tr => {
       const rec = list.find(r => String(r.id) === tr.dataset.id);
       const go = () => cfg.open ? cfg.open(rec) : editRecord(cfg, rec);
       tr.addEventListener('click', go);
       tr.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
     });
+    if (cfg.afterRender) cfg.afterRender(card, list);
   };
   tb.addEventListener('input', draw); tb.addEventListener('change', draw);
   draw();
 }
 
-/* ================= invoices ================= */
-const INV_FILTERS = [['', 'All invoices'], ['open', 'Owing (unpaid, partial, overdue)'], ['overdue', 'Overdue'], ['partial', 'Partly paid'], ['unpaid', 'Unpaid'], ['paid', 'Paid'], ['draft', 'Drafts'], ['void', 'Void']];
-async function invoicesView() {
+/* ================= retainer month editing ================= */
+const RC = { rec: ['c-rec', 'REC'], not_rec: ['c-x', 'Not rec'], na: ['c-na', 'N/A'] };
+const nowY = () => new Date().getFullYear(), nowM = () => new Date().getMonth() + 1;
+function cellHTML(m, year) {
+  const [cls, lbl] = RC[m.status] || ['c-up', '·'];
+  const isNow = year === nowY() && m.month === nowM();
+  return `<button class="rc ${cls}" data-m="${m.id}" data-s="${m.status || ''}" data-a="${num(m.amount)}" title="${num(m.amount) ? 'Billed ' + money(m.amount) : ''}" aria-label="${MONTHS[m.month - 1]} ${year}: ${m.status ? lbl : 'not due yet'}">${lbl}</button>`;
+}
+function statusMenu(anchor, current, title, onPick, amount) {
+  document.querySelector('.smenu')?.remove();
+  const menu = document.createElement('div');
+  menu.className = 'smenu';
+  menu.innerHTML = `<div class="hd">${esc(title)}${amount !== undefined ? `<div style="font-weight:500;margin-top:2px">${amount ? 'Billed ' + money(amount) : 'Not billed yet'}</div>` : ''}</div>` + [['rec', 'Received'], ['not_rec', 'Not received'], ['na', 'N/A (no fee this month)'], ['', 'Not due yet']]
+    .map(([v, l]) => `<button type="button" data-v="${v}" class="${(current || '') === v ? 'on' : ''}"><i class="dot s-${v || 'up'}"></i>${l}</button>`).join('') + (amount !== undefined ? `<button type="button" data-v="__amt" style="border-top:1px solid var(--line)"><i class="dot" style="background:var(--lamp)"></i>${amount ? 'Change amount' : 'Bill this month'}</button>` : '');
+  document.body.appendChild(menu);
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = Math.max(8, Math.min(r.left + scrollX, scrollX + innerWidth - menu.offsetWidth - 8)) + 'px';
+  menu.style.top = (r.bottom + scrollY + 6) + 'px';
+  menu.querySelector('button.on, button')?.focus();
+  menu.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; menu.remove(); onPick(b.dataset.v); });
+  const off = (ev) => { if (!menu.contains(ev.target) && ev.target !== anchor) { menu.remove(); document.removeEventListener('mousedown', off); } };
+  setTimeout(() => document.addEventListener('mousedown', off), 0);
+  menu.addEventListener('keydown', (e) => { if (e.key === 'Escape') { menu.remove(); anchor.focus(); } });
+}
+function wireCells(root, labelFor, after) {
+  root.querySelectorAll('[data-m]').forEach(b => b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    statusMenu(b, b.dataset.s, labelFor(b), async (v) => {
+      if (v === b.dataset.s) return;
+      try {
+        if (v === '__amt') {
+          const cur = num(b.dataset.a);
+          const inp = prompt(`Amount for ${labelFor(b)} (R)\nThis is added to what they owe. Enter 0 to remove the bill.`, cur || '');
+          if (inp === null) return;
+          const a = Number(String(inp).replace(/[^0-9.]/g, '')) || 0;
+          await A('/retainers/' + b.dataset.m, { method: 'PUT', body: { amount: a } });
+          toast(a ? `Billed ${money(a)}` : 'Bill removed'); bust(); after(); return;
+        }
+        await A('/retainers/' + b.dataset.m, { method: 'PUT', body: { status: v } });
+        toast(v === 'rec' ? 'Marked received, payment recorded' : v === 'not_rec' ? 'Marked not received' : v === 'na' ? 'Marked N/A' : 'Cleared');
+        bust(); after();
+      } catch (err) { toast(err.message, true); }
+    }, num(b.dataset.a));
+  }));
+}
+async function toggleRetainer(id) {
+  const c = (await clients(true)).find(x => String(x.id) === String(id));
+  if (!c) return;
+  const turnOff = c.retainer_active;
+  if (turnOff && !confirm(`Cancel ${c.name}'s retainer?\n\nEvery month after ${MONTHS[nowM() - 1]} will be set to N/A. Anything they still owe stays on their account.`)) return;
+  try {
+    await A('/clients/' + id, { method: 'PUT', body: { retainer_active: !turnOff } });
+    bust(); toast(turnOff ? `${c.name}'s retainer cancelled` : `${c.name}'s retainer is active again`); route();
+  } catch (e) { toast(e.message, true); }
+}
+function payFor(client_id, amount) {
+  editRecord(CFG.transactions, {}, { type: 'payment', client_id, amount: amount > 0 ? amount.toFixed(2) : '' });
+}
+
+/* ================= retainers ================= */
+async function retainersView(arg) {
   const main = $('#main');
-  main.innerHTML = `<div class="page-head"><div><h1>Invoices</h1><p class="sub">Create, send and track invoices. Balances update as payments come in.</p></div><div class="actions"><button class="btn primary" data-add>New invoice</button></div></div>
-    <div class="toolbar"><input type="search" placeholder="Search by number or client" aria-label="Search"><select data-st aria-label="Status">${INV_FILTERS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select><select data-period aria-label="Period">${PERIODS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select><span class="count"></span></div>
-    <div class="card table-wrap"><p class="empty">Loading…</p></div>`;
-  $('[data-add]', main).onclick = () => invoiceEditor();
-  const rows = await invoices(true);
-  const tb = $('.toolbar', main);
+  const year = Number(arg) || nowY();
+  const show = sessionStorage.getItem('ret_show') || 'active';
+  main.innerHTML = `<div class="page-head"><div><h1>Retainers</h1><p class="sub">At month end, press <strong>Bill ${MONTHS[nowM() - 1]}</strong> and type what each retainer owes. Payments then tick the months off, oldest first.</p></div>
+    <div class="actions"><button class="btn" data-pay>Record payment</button><button class="btn primary" data-bill>Bill ${MONTHS[nowM() - 1]}</button></div></div>
+    <div class="toolbar"><select data-year aria-label="Year"></select>
+      <select data-show aria-label="Show"><option value="active">Active retainers</option><option value="all">Everyone this year</option><option value="cancelled">Cancelled</option></select>
+      <span class="count"></span></div>
+    <div class="legend-row"><span><i class="dot s-rec"></i>Received</span><span><i class="dot s-not_rec"></i>Not received</span><span><i class="dot s-na"></i>N/A</span><span><i class="dot s-up"></i>Not due yet</span></div>
+    <div class="card rgrid"><p class="empty">Loading…</p></div>`;
+  $('[data-pay]', main).onclick = () => editRecord(CFG.transactions, {}, { type: 'payment' });
+  $('[data-bill]', main).onclick = () => billModal(nowY(), nowM(), () => retainersView(year));
+  const d = await A('/retainers?year=' + year);
+  const ys = $('[data-year]', main);
+  ys.innerHTML = d.years.map(y => `<option value="${y}"${y === year ? ' selected' : ''}>${y}</option>`).join('');
+  ys.onchange = () => { location.hash = 'retainers/' + ys.value; };
+  const sh = $('[data-show]', main); sh.value = show;
   const draw = () => {
-    const qv = $('input', tb).value.trim().toLowerCase(), st = $('[data-st]', tb).value, pr = $('[data-period]', tb).value;
-    const list = rows.filter(i => (!qv || (i.number + ' ' + i.client_name).toLowerCase().includes(qv))
-      && (!st || (st === 'open' ? ['unpaid','partial','overdue'].includes(i.pay_status) : i.pay_status === st)) && inPeriod(i.issue_date, pr));
-    $('.count', tb).textContent = `${list.length} of ${rows.length}`;
-    const card = $('.card', main);
-    if (!rows.length) { card.innerHTML = `<div class="empty">No invoices yet.<br><button class="btn primary" data-add2>Create your first invoice</button></div>`; $('[data-add2]', card).onclick = () => invoiceEditor(); return; }
-    if (!list.length) { card.innerHTML = `<p class="empty">Nothing matches these filters.</p>`; return; }
-    const live = list.filter(i => !['void','draft'].includes(i.status));
-    const sum = (k) => live.reduce((a, i) => a + num(i[k]), 0);
-    card.innerHTML = `<table class="t"><thead><tr><th>Number</th><th>Client</th><th>Issued</th><th>Due</th><th>Status</th><th class="money">Total</th><th class="money">Paid</th><th class="money">Balance</th></tr></thead>
-      <tbody>${list.map(i => `<tr data-id="${i.id}" tabindex="0"><td><strong>${esc(i.number)}</strong></td><td>${esc(i.client_name)}</td><td>${dt(i.issue_date)}</td>
-        <td>${dt(i.due_date)}${i.pay_status === 'overdue' ? `<div class="neg" style="font-size:12px">${i.days_overdue} days late</div>` : ''}</td><td>${pill(i.pay_status)}</td>
-        <td class="money">${money(i.total)}</td><td class="money">${money(num(i.paid) + num(i.credited), true)}</td><td class="money"><strong class="${num(i.balance) > 0 && i.pay_status !== 'draft' && i.pay_status !== 'void' ? 'neg' : ''}">${money(i.balance, true)}</strong></td></tr>`).join('')}</tbody>
-      <tfoot><tr class="static"><td colspan="5">Total <span class="muted" style="font-weight:400">(excludes drafts and void)</span></td><td class="money">${money(sum('total'))}</td><td class="money">${money(sum('paid') + sum('credited'))}</td><td class="money">${money(sum('balance'))}</td></tr></tfoot></table>`;
-    card.querySelectorAll('tbody tr').forEach(tr => { tr.onclick = () => invoiceDetail(tr.dataset.id); tr.onkeydown = e => { if (e.key === 'Enter') invoiceDetail(tr.dataset.id); }; });
+    const mode = sh.value; sessionStorage.setItem('ret_show', mode);
+    const allNA = (c) => c.months.every(m => m.status === 'na');
+    const list = d.clients.filter(c => mode === 'all' ? true : mode === 'active' ? c.retainer_active && c.billing === 'retainer' && !allNA(c) : !(c.retainer_active && c.billing === 'retainer'));
+    $('.count', main).textContent = `${list.length} client${list.length === 1 ? '' : 's'}`;
+    const card = $('.rgrid', main);
+    if (!list.length) { card.innerHTML = `<p class="empty">No retainers to show for ${year}.</p>`; return; }
+    const nm = year === nowY() ? nowM() : 0;
+    const recCount = (i) => list.filter(c => (c.months[i] || {}).status === 'rec').length;
+    const dueCount = (i) => list.filter(c => ['rec', 'not_rec'].includes((c.months[i] || {}).status)).length;
+    card.innerHTML = `<table><thead><tr><th>Client</th>${MONTHS.map((m, i) => `<th class="${i + 1 === nm ? 'now' : ''}">${m}</th>`).join('')}</tr></thead>
+      <tbody>${list.map(c => `<tr class="${c.retainer_active && c.billing === 'retainer' ? '' : 'off'}"><td><a href="#client/${c.client_id || c.id}" style="color:inherit;text-decoration:none"><strong>${esc(c.name)}</strong></a>${c.billing !== 'retainer' ? '<div class="fee">Once-off now</div>' : !c.retainer_active ? '<div class="fee">Cancelled</div>' : ''}</td>
+        ${c.months.map(m => `<td class="${m.month === nm ? 'now' : ''}">${cellHTML(m, year)}</td>`).join('')}</tr>`).join('')}</tbody>
+      <tfoot><tr class="static"><td style="font-size:12px;color:var(--muted);font-weight:600">Received</td>${MONTHS.map((m, i) => `<td style="font-size:12px;color:var(--muted)" class="${i + 1 === nm ? 'now' : ''}">${dueCount(i) ? `${recCount(i)}/${dueCount(i)}` : ''}</td>`).join('')}</tr></tfoot></table>`;
+    const nowTh = card.querySelector('th.now'); if (nowTh && card.scrollWidth > card.clientWidth) card.scrollLeft = Math.max(0, nowTh.offsetLeft - card.clientWidth / 2);
+    wireCells(card, (b) => { const row = b.closest('tr').querySelector('strong').textContent; const i = [...b.closest('tr').children].indexOf(b.parentElement) - 1; return `${row} · ${MONTHS[i]} ${year}`; }, () => retainersView(year));
   };
-  tb.addEventListener('input', draw); tb.addEventListener('change', draw);
-  const pre = sessionStorage.getItem('inv_filter'); if (pre) { $('[data-st]', tb).value = pre; sessionStorage.removeItem('inv_filter'); }
-  draw();
+  sh.onchange = draw; draw();
 }
 
-async function invoiceEditor(id, presets = {}) {
-  const inv = id ? await A('/invoices/' + id) : { client_id: presets.client_id || '', issue_date: todayISO(), due_date: addDays(todayISO(), 7), status: 'sent', items: [{ description: '', qty: 1, unit_price: '' }] };
-  const form = document.createElement('form');
-  form.noValidate = true;
-  form.innerHTML = `<div class="fgrid">
-      ${await fieldHTML({ k: 'client_id', l: 'Client', t: 'client', req: true }, inv.client_id)}
-      ${await fieldHTML({ k: 'contract_id', l: 'Contract', t: 'contract' }, inv.contract_id)}
-      ${await fieldHTML({ k: 'issue_date', l: 'Invoice date', t: 'date', req: true }, inv.issue_date)}
-      ${await fieldHTML({ k: 'due_date', l: 'Due date', t: 'date', req: true }, inv.due_date)}
-      ${await fieldHTML({ k: 'status', l: 'Status', t: 'select', opts: [['sent','Sent (counts towards what’s owed)'],['draft','Draft (not counted yet)'],['void','Void (cancelled)']] }, inv.status)}
-    </div>
-    <table class="items"><thead><tr><th style="width:56%">Description</th><th style="width:12%">Qty</th><th style="width:20%">Unit price (R)</th><th class="num" style="width:12%">Line total</th><th></th></tr></thead><tbody></tbody></table>
-    <button class="btn sm" type="button" data-line style="margin-top:8px">Add line</button>
-    <div class="inv-total"><span>Total</span><span data-total>R 0.00</span></div>
-    <div class="fgrid" style="margin-top:12px">${await fieldHTML({ k: 'notes', l: 'Notes on invoice', t: 'textarea' }, inv.notes)}</div>
-    <p class="form-err" hidden></p>`;
-  const tbody = $('tbody', form);
-  const addLine = (it = { description: '', qty: 1, unit_price: '' }) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td><input data-k="description" value="${esc(it.description)}" placeholder="What you did" aria-label="Description"></td>
-      <td><input data-k="qty" type="number" step="0.01" min="0" value="${esc(it.qty)}" aria-label="Quantity"></td>
-      <td><input data-k="unit_price" type="number" step="0.01" min="0" inputmode="decimal" value="${esc(it.unit_price)}" aria-label="Unit price"></td>
-      <td class="num" data-lt style="padding-top:13px">–</td>
-      <td><button class="rm" type="button" aria-label="Remove line">×</button></td>`;
-    $('.rm', tr).onclick = () => { tr.remove(); if (!tbody.children.length) addLine(); calc(); };
-    tbody.appendChild(tr);
+/* ================= month-end billing ================= */
+async function billModal(year, month, after) {
+  const body = document.createElement('div');
+  const yrs = [year - 1, year, year + 1];
+  body.innerHTML = `<p class="muted" style="margin:0 0 12px">Type what each retainer owes for the month. It's added to their balance and the month shows <b>Not rec</b> until they pay. Leave a box empty to skip someone.</p>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><select data-bm aria-label="Month">${MONTHS.map((m, i) => `<option value="${i + 1}"${i + 1 === month ? ' selected' : ''}>${m}</option>`).join('')}</select>
+    <select data-by aria-label="Year">${yrs.map(y => `<option${y === year ? ' selected' : ''}>${y}</option>`).join('')}</select>
+    <button type="button" class="btn sm" data-same style="margin-left:auto">Fill in last amounts</button></div>
+    <div class="bill-list"><p class="empty">Loading…</p></div>`;
+  const foot = document.createElement('div');
+  foot.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%';
+  foot.innerHTML = `<span class="muted" data-tot style="margin-right:auto"></span><button type="button" class="btn" data-cancel>Cancel</button><button type="button" class="btn primary" data-save>Save bills</button>`;
+  const M = modal({ title: 'Bill retainers', body, foot, wide: true });
+  $('[data-cancel]', foot).onclick = M.close;
+  let rows = [];
+  const inputs = () => [...body.querySelectorAll('input[data-c]')];
+  const total = () => { const t = inputs().reduce((a, i) => a + (Number(i.value) || 0), 0); const n = inputs().filter(i => Number(i.value) > 0).length; $('[data-tot]', foot).textContent = `${n} client${n === 1 ? '' : 's'} · ${money(t)}`; };
+  const load = async () => {
+    const y = Number($('[data-by]', body).value), m = Number($('[data-bm]', body).value);
+    $('.bill-list', body).innerHTML = '<p class="empty">Loading…</p>';
+    rows = await A(`/retainers/bill?year=${y}&month=${m}`);
+    $('.bill-list', body).innerHTML = rows.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>Client</th><th class="money">Last bill</th><th class="money">${MONTHS[m - 1]} ${y} (R)</th></tr></thead><tbody>${rows.map(r => `<tr class="static">
+      <td><strong>${esc(r.name)}</strong>${r.status === 'rec' ? ' <span class="pill good">Paid</span>' : ''}</td>
+      <td class="money muted">${num(r.last_amount) ? money(r.last_amount) : '–'}</td>
+      <td class="money"><input data-c="${r.client_id}" data-last="${num(r.last_amount)}" inputmode="decimal" placeholder="0" value="${num(r.amount) ? num(r.amount) : ''}" aria-label="${esc(r.name)} amount" style="width:110px;text-align:right"></td></tr>`).join('')}</tbody></table></div>`
+      : '<p class="empty">No active retainers for this month.</p>';
+    inputs().forEach(i => i.addEventListener('input', total)); total();
+    inputs()[0]?.focus();
   };
-  const lines = () => [...tbody.children].map(tr => Object.fromEntries([...tr.querySelectorAll('input')].map(i => [i.dataset.k, i.value])));
-  const calc = () => {
-    let t = 0;
-    [...tbody.children].forEach(tr => { const [d, q, p] = tr.querySelectorAll('input'); const lt = num(q.value) * num(p.value); t += lt; $('[data-lt]', tr).textContent = p.value ? money(lt) : '–'; });
-    $('[data-total]', form).textContent = money(t);
+  $('[data-bm]', body).onchange = load; $('[data-by]', body).onchange = load;
+  $('[data-same]', body).onclick = () => { inputs().forEach(i => { if (!i.value && Number(i.dataset.last)) i.value = i.dataset.last; }); total(); };
+  $('[data-save]', foot).onclick = async (e) => {
+    const y = Number($('[data-by]', body).value), m = Number($('[data-bm]', body).value);
+    const items = inputs().map(i => {
+      const r = rows.find(x => String(x.client_id) === i.dataset.c);
+      const v = i.value.trim().replace(/[^0-9.]/g, '');
+      if (v === '' && !num(r.amount)) return null;          // left empty and never billed: skip
+      return { client_id: Number(i.dataset.c), amount: v === '' ? 0 : Number(v) };
+    }).filter(Boolean);
+    e.target.disabled = true;
+    try { const r = await A('/retainers/bill', { method: 'POST', body: { year: y, month: m, items } }); M.close(); bust(); toast(`Billed ${r.n} client${r.n === 1 ? '' : 's'} for ${MONTHS[m - 1]} · ${money(r.total)}`); after && after(); }
+    catch (err) { toast(err.message, true); e.target.disabled = false; }
   };
-  (inv.items || []).forEach(addLine);
-  form.addEventListener('input', calc);
-  $('[data-line]', form).onclick = () => { addLine(); tbody.lastElementChild.querySelector('input').focus(); };
-  calc();
-  const foot = document.createElement('div'); foot.style.cssText = 'display:contents';
-  foot.innerHTML = `<div class="right"><button class="btn" type="button" data-cancel>Cancel</button><button class="btn primary" type="button" data-save>${id ? 'Save invoice' : 'Create invoice'}</button></div>`;
-  const m = modal({ title: id ? 'Edit ' + inv.number : 'New invoice', body: form, foot, wide: true });
-  await wireLinkedSelects(form);
-  // choosing a contract fills an empty first line
-  form.elements.contract_id.addEventListener('change', async () => {
-    const k = (await contracts()).find(c => String(c.id) === form.elements.contract_id.value);
-    const first = tbody.firstElementChild?.querySelectorAll('input');
-    if (k && first && !first[0].value) {
-      const [y, mo] = form.elements.issue_date.value.split('-');
-      first[0].value = k.kind === 'retainer' ? `${k.title} – ${MONTHS[mo - 1]} ${y}` : k.title;
-      first[2].value = num(k.value).toFixed(2); calc();
-    }
-  });
-  $('[data-cancel]', m.el).onclick = m.close;
-  $('[data-save]', m.el).onclick = async () => {
-    const err = $('.form-err', form);
-    const body = { client_id: form.elements.client_id.value, contract_id: form.elements.contract_id.value, issue_date: form.elements.issue_date.value,
-      due_date: form.elements.due_date.value, status: form.elements.status.value, notes: form.elements.notes.value, items: lines().filter(l => l.description.trim()) };
-    if (!body.client_id) { err.hidden = false; err.textContent = 'Choose a client for this invoice.'; return; }
-    if (!body.items.length) { err.hidden = false; err.textContent = 'Add at least one line with a description.'; return; }
-    const btn = $('[data-save]', m.el); btn.disabled = true;
-    try {
-      const saved = await A('/invoices' + (id ? '/' + id : ''), { method: id ? 'PUT' : 'POST', body });
-      m.close(); bust(); toast(id ? 'Invoice saved' : `${saved.number} created`); await route(); invoiceDetail(saved.id);
-    } catch (e) { err.hidden = false; err.textContent = e.message; btn.disabled = false; }
-  };
-}
-
-async function invoiceDetail(id) {
-  const inv = await A('/invoices/' + id);
-  const wa = waNum(inv.client_phone);
-  const waMsg = `Hi ${inv.contact_person || inv.client_name}, a friendly reminder that invoice ${inv.number} has ${money(inv.balance)} outstanding${inv.pay_status === 'overdue' ? `, which was due on ${dt(inv.due_date).replace(/<[^>]+>/g,'')}` : ''}. Please use ${inv.number} as your reference. Thank you! – The House of Services`;
-  const body = `<div class="kv"><div><span>Client</span><b style="font-size:15px">${esc(inv.client_name)}</b></div><div><span>Total</span><b>${money(inv.total)}</b></div><div><span>Paid and credited</span><b>${money(num(inv.paid) + num(inv.credited))}</b></div><div><span>Balance</span><b class="${num(inv.balance) > 0 ? 'neg' : 'pos'}">${money(inv.balance)}</b></div></div>
-    <p style="margin-bottom:14px">${pill(inv.pay_status)} <span class="muted" style="margin-left:6px">Issued ${dt(inv.issue_date)} · Due ${dt(inv.due_date)}</span></p>
-    <div class="card table-wrap"><table class="t"><thead><tr><th>Description</th><th class="num">Qty</th><th class="money">Unit price</th><th class="money">Amount</th></tr></thead>
-    <tbody>${inv.items.map(i => `<tr class="static"><td>${esc(i.description)}</td><td class="num">${num(i.qty)}</td><td class="money">${money(i.unit_price)}</td><td class="money">${money(num(i.qty) * num(i.unit_price))}</td></tr>`).join('')}</tbody></table></div>
-    ${inv.payments.length || inv.credits.length ? `<h3 style="font-size:15px;margin:18px 0 8px">Payments and credits</h3><div class="card table-wrap"><table class="t"><tbody>
-      ${inv.payments.map(p => `<tr class="static"><td>${dt(p.paid_on)}</td><td>Payment · ${esc(p.method)}${p.reference ? ' · ' + esc(p.reference) : ''}</td><td class="money pos">${money(p.amount)}</td></tr>`).join('')}
-      ${inv.credits.map(c => `<tr class="static"><td>${dt(c.issued_on)}</td><td>Credit note${c.reason ? ' · ' + esc(c.reason) : ''}</td><td class="money">${money(c.amount)}</td></tr>`).join('')}</tbody></table></div>` : ''}
-    ${inv.notes ? `<p class="muted" style="margin-top:14px;white-space:pre-wrap">${esc(inv.notes)}</p>` : ''}`;
-  const foot = document.createElement('div'); foot.style.cssText = 'display:contents';
-  foot.innerHTML = `<button class="btn danger" data-del>Delete</button><div class="right" style="flex-wrap:wrap">
-    <button class="btn" data-print>Print or save PDF</button>
-    ${wa && num(inv.balance) > 0 ? `<a class="btn" target="_blank" rel="noopener" href="https://wa.me/${wa}?text=${encodeURIComponent(waMsg)}">Send WhatsApp reminder</a>` : ''}
-    <button class="btn" data-edit>Edit</button>
-    ${num(inv.balance) > 0 && inv.status !== 'void' ? '<button class="btn" data-credit>Add credit note</button><button class="btn primary" data-pay>Record payment</button>' : ''}</div>`;
-  const m = modal({ title: inv.number, body, foot, wide: true });
-  const q = (s) => $(s, m.el);
-  q('[data-print]').onclick = () => printInvoice(inv);
-  q('[data-edit]').onclick = () => { m.close(); invoiceEditor(id); };
-  if (q('[data-pay]')) q('[data-pay]').onclick = () => { m.close(); editRecord(CFG.payments, {}, { client_id: inv.client_id, invoice_id: inv.id, amount: num(inv.balance).toFixed(2) }); };
-  if (q('[data-credit]')) q('[data-credit]').onclick = () => { m.close(); editRecord(CFG.credit_notes, {}, { client_id: inv.client_id, invoice_id: inv.id }); };
-  q('[data-del]').onclick = async () => {
-    if (!confirm(`Delete ${inv.number}? Linked payments stay on the client’s account as unallocated credit.`)) return;
-    await A('/invoices/' + id, { method: 'DELETE' }); m.close(); bust(); toast(`${inv.number} deleted`); route();
-  };
-}
-
-async function printInvoice(inv) {
-  const s = await A('/settings');
-  const w = window.open('', '_blank');
-  if (!w) { toast('Allow pop-ups for this site to print invoices.', true); return; }
-  const line = (t) => esc(t || '').replace(/\n/g, '<br>');
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(inv.number)} – ${esc(inv.client_name)}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800&family=Hanken+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
-  <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Hanken Grotesk",Arial,sans-serif;color:#0b1320;font-size:13px;line-height:1.5;padding:48px;max-width:860px;margin:auto}
-  .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0b1320;padding-bottom:22px}
-  .logo{display:flex;align-items:center;gap:12px}.logo b{font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:28px;line-height:1}
-  h1{font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:44px;line-height:1;text-align:right}
-  .meta{text-align:right;margin-top:6px;color:#47526a}
-  .cols{display:flex;justify-content:space-between;gap:40px;margin:26px 0}
-  .lbl{font-size:11px;font-weight:700;color:#6b7690;margin-bottom:4px}
-  table{width:100%;border-collapse:collapse;margin-top:8px}th{text-align:left;font-size:11px;color:#6b7690;padding:8px 10px;border-bottom:1.5px solid #0b1320}
-  td{padding:10px;border-bottom:1px solid #e3e7ee}.r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-  .tot{margin-left:auto;width:300px;margin-top:14px}.tot div{display:flex;justify-content:space-between;padding:6px 10px}
-  .tot .due{background:#0b1320;color:#fff;font-weight:700;font-size:16px;border-radius:4px;margin-top:4px}
-  .due-bar{height:6px;background:#FFC629;margin-top:-3px}
-  .bank{margin-top:34px;padding:16px 18px;background:#f3f5f8;border-left:4px solid #FFC629}
-  .foot{margin-top:28px;color:#47526a}
-  @media print{body{padding:0}@page{margin:18mm}}</style></head><body>
-  <div class="top"><div class="logo"><span style="display:inline-flex;align-items:center;justify-content:center;background:#0b1320;border-radius:12px;padding:10px 14px;-webkit-print-color-adjust:exact;print-color-adjust:exact"><img src="https://cdn.shopify.com/s/files/1/0613/0515/9770/files/Untitled_design_13.png?v=1723892185" alt="" style="height:54px;width:auto;display:block" onerror="this.parentElement.style.display='none'"></span>
-    <div><b>${esc(s.business_name || 'The House of Services')}</b><div style="color:#47526a;margin-top:4px">${line(s.address)}<br>${esc(s.phone || '')} · ${esc(s.email || '')}</div></div></div>
-    <div><h1>Invoice</h1><div class="meta"><b style="color:#0b1320">${esc(inv.number)}</b><br>Date: ${dt(inv.issue_date)}<br>Due: ${dt(inv.due_date)}</div></div></div>
-  <div class="cols"><div><div class="lbl">Bill to</div><b>${esc(inv.client_name)}</b>${inv.contact_person ? '<br>Attn: ' + esc(inv.contact_person) : ''}${inv.client_address ? '<br>' + line(inv.client_address) : ''}${inv.client_email ? '<br>' + esc(inv.client_email) : ''}</div>
-    <div style="text-align:right"><div class="lbl">Amount due</div><b style="font-size:24px">${money(inv.balance)}</b></div></div>
-  <table><thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>
-  ${inv.items.map(i => `<tr><td>${esc(i.description)}</td><td class="r">${num(i.qty)}</td><td class="r">${money(i.unit_price)}</td><td class="r">${money(num(i.qty) * num(i.unit_price))}</td></tr>`).join('')}</tbody></table>
-  <div class="tot"><div><span>Total</span><span class="r">${money(inv.total)}</span></div>
-  ${num(inv.paid) ? `<div><span>Paid</span><span class="r">−${money(inv.paid)}</span></div>` : ''}${num(inv.credited) ? `<div><span>Credits</span><span class="r">−${money(inv.credited)}</span></div>` : ''}
-  <div class="due"><span>Balance due</span><span class="r">${money(inv.balance)}</span></div><div class="due-bar"></div></div>
-  ${inv.notes ? `<p style="margin-top:22px">${line(inv.notes)}</p>` : ''}
-  <div class="bank"><div class="lbl">Banking details</div>${line(s.bank_details)}<br>Reference: <b>${esc(inv.number)}</b></div>
-  <p class="foot">${line(s.invoice_footer)}</p>
-  <script>document.fonts.ready.then(()=>setTimeout(()=>print(),200))<\/script></body></html>`);
-  w.document.close();
+  load();
 }
 
 /* ================= debtors ================= */
 async function debtorsView() {
   const main = $('#main');
-  main.innerHTML = `<div class="page-head"><div><h1>Debtors</h1><p class="sub">Who owes you, and how late it is. Ageing counts days past each invoice’s due date.</p></div></div><div class="stat-grid"></div><div class="card table-wrap"><p class="empty">Loading…</p></div>`;
-  const rows = await A('/debtors');
-  const S = (k) => rows.reduce((a, r) => a + num(r[k]), 0);
-  const late = S('d30') + S('d60') + S('d90') + S('d90plus');
+  main.innerHTML = `<div class="page-head"><div><h1>Debtors</h1><p class="sub">Who owes you. Recording a payment reduces it straight away.</p></div><div class="actions"><button class="btn primary" data-pay>Record payment</button></div></div><div class="stat-grid"></div>
+    <div class="toolbar"><input type="search" placeholder="Search clients" aria-label="Search"><select data-type aria-label="Type"><option value="">All debtors</option><option value="retainer">Retainer clients</option><option value="once_off">Once-off clients</option></select><span class="count"></span></div>
+    <div class="card table-wrap"><p class="empty">Loading…</p></div>`;
+  $('[data-pay]', main).onclick = () => editRecord(CFG.transactions, {}, { type: 'payment' });
+  const all = await A('/debtors');
+  const owing = all.filter(r => num(r.balance) > 0);
+  const S = (k, rows = owing) => rows.reduce((a, r) => a + num(r[k]), 0);
   $('.stat-grid', main).innerHTML = [
-    ['Total owed to you', money(S('balance')), `${rows.filter(r => num(r.balance) > 0).length} clients`],
-    ['Not yet due', money(S('current')), 'Within payment terms'],
-    ['Overdue', money(late), 'Past the due date', late > 0],
-    ['Over 60 days', money(S('d90') + S('d90plus')), 'Follow up or write off', S('d90') + S('d90plus') > 0],
+    ['Total owed to you', money(S('balance')), `${owing.length} clients`, true],
+    ['Retainer clients', money(S('balance', owing.filter(r => r.billing === 'retainer'))), `${owing.filter(r => r.billing === 'retainer').length} owe you`],
+    ['Once-off clients', money(S('balance', owing.filter(r => r.billing !== 'retainer'))), `${owing.filter(r => r.billing !== 'retainer').length} owe you`],
+    ['In credit', money(-S('balance', all.filter(r => num(r.balance) < 0))), 'Paid ahead'],
   ].map(([l, v, n, bad]) => `<div class="card kpi ${bad ? 'alert' : ''}"><div class="k-label">${l}</div><div class="k-val">${v}</div><div class="k-note">${n}</div></div>`).join('');
-  const card = $('.card.table-wrap', main);
-  if (!rows.length) { card.innerHTML = '<p class="empty">Nobody owes you anything right now.</p>'; return; }
-  card.innerHTML = `<table class="t"><thead><tr><th>Client</th><th class="money">Not yet due</th><th class="money">1–30 days</th><th class="money">31–60 days</th><th class="money">61–90 days</th><th class="money">90+ days</th><th class="money">Unallocated credit</th><th class="money">Balance</th><th></th></tr></thead>
-    <tbody>${rows.map(r => {
-      const wa = waNum(r.phone);
-      const msg = `Hi ${r.name}, this is a friendly reminder from The House of Services that your account has ${money(r.balance)} outstanding. Please let us know if you need a statement. Thank you!`;
-      return `<tr data-id="${r.id}" tabindex="0"><td><strong>${esc(r.name)}</strong><div class="muted" style="font-size:13px">${r.open_invoices} open invoice${r.open_invoices === 1 ? '' : 's'}</div></td>
-      <td class="money">${money(r.current, true)}</td><td class="money">${money(r.d30, true)}</td><td class="money">${money(r.d60, true)}</td><td class="money ${num(r.d90) ? 'neg' : ''}">${money(r.d90, true)}</td><td class="money ${num(r.d90plus) ? 'neg' : ''}">${money(r.d90plus, true)}</td>
-      <td class="money">${num(r.unallocated) ? '−' + money(r.unallocated) : '<span class="muted">–</span>'}</td><td class="money"><strong>${money(r.balance)}</strong></td>
-      <td>${wa && num(r.balance) > 0 ? `<a class="btn sm" target="_blank" rel="noopener" onclick="event.stopPropagation()" href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}">Remind</a>` : ''}</td></tr>`; }).join('')}</tbody>
-    <tfoot><tr class="static"><td>Total</td>${['current','d30','d60','d90','d90plus'].map(k => `<td class="money">${money(S(k))}</td>`).join('')}<td class="money">${S('unallocated') ? '−' + money(S('unallocated')) : ''}</td><td class="money">${money(S('balance'))}</td><td></td></tr></tfoot></table>`;
-  card.querySelectorAll('tbody tr').forEach(tr => { tr.onclick = () => location.hash = 'client/' + tr.dataset.id; tr.onkeydown = e => { if (e.key === 'Enter') tr.onclick(); }; });
+  const tb = $('.toolbar', main);
+  const draw = () => {
+    const qv = $('input', tb).value.trim().toLowerCase(), ty = $('[data-type]', tb).value;
+    const rows = all.filter(r => (!qv || r.name.toLowerCase().includes(qv)) && (!ty || r.billing === ty));
+    $('.count', tb).textContent = `${rows.length} of ${all.length}`;
+    const card = $('.card.table-wrap', main);
+    if (!rows.length) { card.innerHTML = '<p class="empty">Nobody here owes you anything.</p>'; return; }
+    card.innerHTML = `<table class="t"><thead><tr><th>Client</th><th>Unpaid months</th><th>Last payment</th><th class="money">Total owed</th><th></th></tr></thead>
+      <tbody>${rows.map(r => {
+        const wa = waNum(r.phone);
+        const msg = `Hi ${r.name}, a friendly reminder from The House of Services that your account has ${money(r.balance)} outstanding${r.unpaid_months ? ` (${r.unpaid_months})` : ''}. Thank you!`;
+        return `<tr data-id="${r.id}" tabindex="0"><td><strong>${esc(r.name)}</strong><div class="muted" style="font-size:12px">${r.billing === 'retainer' ? 'Retainer' + (r.retainer_active ? '' : ' (cancelled)') : 'Once-off'}</div></td>
+          <td style="max-width:260px;font-size:13px" class="${r.unpaid_months ? 'neg' : 'muted'}">${esc(r.unpaid_months || '–')}</td>
+          <td>${dt(r.last_paid)}</td>
+          <td class="money"><strong class="${num(r.balance) < 0 ? 'pos' : ''}">${num(r.balance) < 0 ? 'In credit ' + money(-r.balance) : money(r.balance)}</strong></td>
+          <td style="white-space:nowrap">${num(r.balance) > 0 ? `<button class="btn sm" data-paid="${r.id}">Paid</button> ` : ''}${wa && num(r.balance) > 0 ? `<a class="btn sm" target="_blank" rel="noopener" onclick="event.stopPropagation()" href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}">Remind</a>` : ''}</td></tr>`; }).join('')}</tbody>
+      <tfoot><tr class="static"><td colspan="3">Total</td><td class="money">${money(S('balance', rows))}</td><td></td></tr></tfoot></table>`;
+    card.querySelectorAll('tbody tr').forEach(tr => { tr.onclick = () => location.hash = 'client/' + tr.dataset.id; tr.onkeydown = e => { if (e.key === 'Enter') tr.onclick(); }; });
+    card.querySelectorAll('[data-paid]').forEach(b => b.onclick = (e) => { e.stopPropagation(); const r = all.find(x => String(x.id) === b.dataset.paid); payFor(r.id, num(r.balance)); });
+  };
+  tb.addEventListener('input', draw); tb.addEventListener('change', draw); draw();
 }
 
-/* ================= client statement ================= */
+/* ================= client page ================= */
 async function clientView(id) {
   const main = $('#main');
   main.innerHTML = '<p class="empty">Loading…</p>';
   const d = await A(`/clients/${id}/statement`);
-  const c = d.client, T = d.totals;
+  const c = d.client;
   const wa = waNum(c.phone);
+  const bal = num(c.balance);
+  const received = d.transactions.filter(t => t.type === 'payment').reduce((a, t) => a + num(t.amount), 0);
+  const unpaid = d.months.filter(m => m.status === 'not_rec').length;
+  const years = [...new Set(d.months.map(m => m.year))].sort((a, b) => b - a);
   const mini = (title, rows, head, row, empty, addBtn) => `<div class="card section"><div class="card-h"><h2>${title}</h2>${addBtn || ''}</div>${rows.length ? `<div class="table-wrap"><table class="t"><thead><tr>${head}</tr></thead><tbody>${rows.map(row).join('')}</tbody></table></div>` : `<p class="empty" style="padding:14px 18px 20px;text-align:left">${empty}</p>`}</div>`;
   main.innerHTML = `<a class="back" href="#clients">← All clients</a>
-    <div class="page-head"><div><h1>${esc(c.name)}</h1><div class="info-row">${pill(c.status)}${c.contact_person ? `<span>${esc(c.contact_person)}</span>` : ''}${c.phone ? `<span>${esc(c.phone)}</span>` : ''}${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ''}</div></div>
-      <div class="actions">${wa ? `<a class="btn" target="_blank" rel="noopener" href="https://wa.me/${wa}">WhatsApp</a>` : ''}<button class="btn" data-edit>Edit client</button><button class="btn" data-pay>Record payment</button><button class="btn primary" data-inv>New invoice</button></div></div>
+    <div class="page-head"><div><h1>${esc(c.name)}</h1><div class="info-row">${c.billing === 'retainer' ? `<button class="tog ${c.retainer_active ? 'on' : 'off'}" data-toggle>${c.retainer_active ? 'Active retainer' : 'Cancelled retainer'}</button>` : '<span class="pill mute">Once-off</span>'}${c.contact_person ? `<span>${esc(c.contact_person)}</span>` : ''}${c.phone ? `<span>${esc(c.phone)}</span>` : ''}${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ''}</div></div>
+      <div class="actions">${wa ? `<a class="btn" target="_blank" rel="noopener" href="https://wa.me/${wa}">WhatsApp</a>` : ''}<button class="btn" data-edit>Edit client</button><button class="btn" data-owe>Add amount owed</button><button class="btn primary" data-pay>Record payment</button></div></div>
     <div class="stat-grid">
-      <div class="card kpi"><div class="k-label">Total billed</div><div class="k-val">${money(T.billed)}</div></div>
-      <div class="card kpi"><div class="k-label">Total paid</div><div class="k-val">${money(T.paid)}</div></div>
-      <div class="card kpi"><div class="k-label">Credits given</div><div class="k-val">${money(T.credited)}</div></div>
-      <div class="card kpi ${T.balance > 0 ? 'alert' : ''}"><div class="k-label">${T.balance < 0 ? 'In credit' : 'Balance owing'}</div><div class="k-val">${money(Math.abs(T.balance))}</div></div>
+      <div class="card kpi ${bal > 0 ? 'alert' : ''}"><div class="k-label">${bal < 0 ? 'In credit' : 'Balance owing'}</div><div class="k-val">${money(Math.abs(bal))}</div></div>
+      <div class="card kpi"><div class="k-label">Client type</div><div class="k-val" style="font-size:22px">${c.billing === 'retainer' ? 'Retainer' : 'Once-off'}</div><div class="k-note">${c.billing === 'retainer' && c.retainer_start ? 'Since ' + mon(c.retainer_start) : ''}</div></div>
+      <div class="card kpi"><div class="k-label">Unpaid months</div><div class="k-val">${unpaid}</div></div>
+      <div class="card kpi"><div class="k-label">Total received</div><div class="k-val">${money(received)}</div><div class="k-note">All recorded payments</div></div>
     </div>
     ${c.notes ? `<div class="card" style="padding:14px 18px;white-space:pre-wrap;color:var(--ink-2)">${esc(c.notes)}</div>` : ''}
+    ${years.length ? `<div class="card section" id="strip"><div class="card-h"><h2>Retainer months</h2><span class="muted" style="font-size:13px">Click a month to change it</span></div>
+      <div class="ystrip"><span></span>${MONTHS.map(m => `<span class="ml">${m}</span>`).join('')}</div>
+      ${years.map(y => `<div class="ystrip"><span class="yl">${y}</span>${Array.from({ length: 12 }, (_, i) => { const m = d.months.find(x => x.year === y && x.month === i + 1); return m ? cellHTML(m, y) : '<span></span>'; }).join('')}</div>`).join('')}<div style="height:10px"></div></div>` : ''}
+    ${mini('Transactions', d.transactions, '<th>Date</th><th>Type</th><th>Details</th><th class="money">Amount</th>',
+      t => `<tr data-t="${t.id}" tabindex="0"><td>${dt(t.tx_date)}</td><td>${txPill(t.type)}</td><td>${esc(t.description || '')}${t.months ? `<div class="muted" style="font-size:13px">Paid: ${esc(t.months)}</div>` : ''}${t.billed_for ? `<div class="muted" style="font-size:13px">Bill for ${esc(t.billed_for)}</div>` : ''}</td><td class="money ${t.type === 'payment' ? 'tx-in' : ''}">${t.type === 'payment' ? '+' : ''}${money(t.amount)}</td></tr>`,
+      'Nothing recorded yet.')}
     ${mini('Contracts', d.contracts, '<th>Contract</th><th>Type</th><th>Dates</th><th>Status</th><th class="money">Value</th>',
-      k => `<tr data-k="${k.id}" tabindex="0"><td><strong>${esc(k.title)}</strong></td><td>${pill(k.kind)}</td><td>${dt(k.start_date)} to ${dt(k.end_date)}</td><td>${pill(k.status)}</td><td class="money">${money(k.value)}${k.kind === 'retainer' ? '<span class="muted"> /mo</span>' : ''}</td></tr>`,
-      'No contracts yet.', '<button data-addk>Add contract</button>')}
-    ${mini('Invoices', d.invoices, '<th>Number</th><th>Issued</th><th>Due</th><th>Status</th><th class="money">Total</th><th class="money">Balance</th>',
-      i => `<tr data-i="${i.id}" tabindex="0"><td><strong>${esc(i.number)}</strong></td><td>${dt(i.issue_date)}</td><td>${dt(i.due_date)}</td><td>${pill(i.pay_status)}</td><td class="money">${money(i.total)}</td><td class="money">${money(i.balance, true)}</td></tr>`,
-      'No invoices yet.')}
-    ${mini('Payments', d.payments, '<th>Date</th><th>Invoice</th><th>Method</th><th>Reference</th><th class="money">Amount</th>',
-      p => `<tr class="static"><td>${dt(p.paid_on)}</td><td>${p.invoice_number ? esc(p.invoice_number) : '<span class="muted">Unallocated</span>'}</td><td>${esc(p.method)}</td><td>${esc(p.reference || '')}</td><td class="money pos">${money(p.amount)}</td></tr>`,
-      'No payments recorded.')}
-    ${d.credits.length ? mini('Credit notes', d.credits, '<th>Date</th><th>Invoice</th><th>Reason</th><th class="money">Amount</th>',
-      n => `<tr class="static"><td>${dt(n.issued_on)}</td><td>${n.invoice_number ? esc(n.invoice_number) : '<span class="muted">Unallocated</span>'}</td><td>${esc(n.reason || '')}</td><td class="money">${money(n.amount)}</td></tr>`, '') : ''}
-    ${d.ad_spend.length ? mini('Ad spend', d.ad_spend, '<th>Month</th><th>Platform</th><th class="money">Budget</th><th class="money">Spent</th><th class="money">Your fee</th>',
-      a => `<tr class="static"><td>${mon(a.month)}</td><td>${esc(a.platform)}</td><td class="money">${money(a.budget, true)}</td><td class="money">${money(a.spend)}</td><td class="money">${money(a.fee, true)}</td></tr>`, '') : ''}`;
+      k => `<tr data-k="${k.id}" tabindex="0"><td><strong>${esc(k.title)}</strong></td><td>${pill(k.kind)}</td><td>${dt(k.start_date)} to ${dt(k.end_date)}</td><td>${pill(k.status)}</td><td class="money">${money(k.value)}</td></tr>`,
+      'No contracts yet.', '<button data-addk>Add contract</button>')}`;
   $('[data-edit]', main).onclick = () => editRecord(CFG.clients, c);
-  $('[data-inv]', main).onclick = () => invoiceEditor(null, { client_id: c.id });
-  $('[data-pay]', main).onclick = () => editRecord(CFG.payments, {}, { client_id: c.id });
+  $('[data-pay]', main).onclick = () => payFor(c.id, 0);
+  $('[data-owe]', main).onclick = () => editRecord(CFG.transactions, {}, { type: 'charge', client_id: c.id });
   $('[data-addk]', main).onclick = () => editRecord(CFG.contracts, {}, { client_id: c.id });
-  main.querySelectorAll('[data-i]').forEach(tr => tr.onclick = () => invoiceDetail(tr.dataset.i));
+  const tg = $('[data-toggle]', main); if (tg) tg.onclick = () => toggleRetainer(c.id);
+  main.querySelectorAll('[data-t]').forEach(tr => tr.onclick = () => editRecord(CFG.transactions, d.transactions.find(t => String(t.id) === tr.dataset.t)));
   main.querySelectorAll('[data-k]').forEach(tr => tr.onclick = () => editRecord(CFG.contracts, d.contracts.find(k => String(k.id) === tr.dataset.k)));
+  const strip = $('#strip', main);
+  if (strip) wireCells(strip, (b) => { const row = b.parentElement; const y = row.querySelector('.yl').textContent; const i = [...row.children].indexOf(b) - 1; return `${MONTHS[i]} ${y}`; }, () => clientView(id));
 }
 
 /* ================= dashboard ================= */
 async function dashboardView() {
   const main = $('#main');
   const now = new Date();
-  main.innerHTML = `<div class="page-head"><div><h1>Dashboard</h1><p class="sub">${MONTHS[now.getMonth()]} ${now.getFullYear()} at a glance</p></div><div class="actions"><button class="btn" data-pay>Record payment</button><button class="btn primary" data-inv>New invoice</button></div></div><p class="empty">Loading…</p>`;
-  $('[data-inv]', main).onclick = () => invoiceEditor();
-  $('[data-pay]', main).onclick = () => editRecord(CFG.payments);
+  main.innerHTML = `<div class="page-head"><div><h1>Dashboard</h1><p class="sub">${MONTHS[now.getMonth()]} ${now.getFullYear()} at a glance</p></div><div class="actions"><button class="btn" data-bill>Bill ${MONTHS[now.getMonth()]}</button><button class="btn primary" data-pay>Record payment</button></div></div><p class="empty">Loading…</p>`;
+  $('[data-bill]', main).onclick = () => billModal(now.getFullYear(), now.getMonth() + 1, dashboardView);
+  $('[data-pay]', main).onclick = () => editRecord(CFG.transactions, {}, { type: 'payment' });
   const d = await A('/dashboard');
   const K = d.kpis;
   const diff = K.incomeMonth - K.incomeLast;
   const tile = (l, v, n, href, alert) => `<a class="card kpi ${alert ? 'alert' : ''}" href="${href}"><div class="k-label">${l}</div><div class="k-val">${v}</div><div class="k-note">${n}</div></a>`;
   $('.empty', main).outerHTML = `
     <div class="kpis">
-      ${tile('Income this month', money(K.incomeMonth), K.incomeLast ? `${diff >= 0 ? '▲' : '▼'} ${money(Math.abs(diff))} vs last month` : 'Payments received', '#payments')}
-      ${tile('Expenses this month', money(K.expMonth), 'Costs recorded', '#expenses')}
-      ${tile('Profit this month', money(K.profitMonth), 'Income minus expenses', '#expenses', K.profitMonth < 0)}
-      ${tile('Monthly retainers', money(K.mrr), 'Active retainer contracts', '#contracts')}
-      ${tile('Owed to you', money(K.outstanding), 'Open invoices, less deposits held', '#debtors')}
-      ${tile('Overdue', money(K.overdue), 'Past the due date', '#invoices/overdue', K.overdue > 0)}
-      ${tile('Client ad spend this month', money(K.adMonth), `${money(K.adFeeMonth)} in management fees`, '#ad_spend')}
+      ${tile('Income this month', money(K.incomeMonth), K.incomeLast ? `${diff >= 0 ? '▲' : '▼'} ${money(Math.abs(diff))} vs last month` : 'Payments received', '#transactions')}
+      ${tile('Billed this month', money(K.billedMonth), 'Amounts owed added this month', '#transactions')}
+      ${tile('Owed to you', money(K.outstanding), 'All clients', '#debtors', K.outstanding > 0)}
+      ${tile('Billed, not received', money(K.notRecAmt), `${K.notRecCount} retainer month${K.notRecCount === 1 ? '' : 's'} waiting`, '#retainers')}
+      ${tile('Active retainers', K.activeRet, K.unbilled ? `${K.unbilled} not billed for ${MONTHS[now.getMonth()]} yet` : 'Retainer clients', '#retainers')}
       ${tile('New leads', K.newLeads, 'From the website, not yet contacted', '#leads')}
     </div>
     <div class="card chart-card">
-      <div class="card-h"><h2>Income and expenses, last 12 months</h2><div style="display:flex;gap:16px;align-items:center"><div class="legend"><span><i style="background:var(--income)"></i>Income</span><span><i style="background:var(--expense)"></i>Expenses</span></div><button data-tbl>Show table</button></div></div>
+      <div class="card-h"><h2>Received and billed, last 12 months</h2><div style="display:flex;gap:16px;align-items:center"><div class="legend"><span><i style="background:var(--income)"></i>Received</span><span><i style="background:var(--expense)"></i>Billed</span></div><button data-tbl>Show table</button></div></div>
       <div class="chart" id="chart"></div>
-      <div class="table-wrap" id="chartTable" hidden><table class="t"><thead><tr><th>Month</th><th class="money">Income</th><th class="money">Expenses</th><th class="money">Profit</th><th class="money">Client ad spend</th></tr></thead>
-        <tbody>${d.series.map(s => `<tr class="static"><td>${s.label}</td><td class="money">${money(s.income)}</td><td class="money">${money(s.expenses)}</td><td class="money ${num(s.income) - num(s.expenses) < 0 ? 'neg' : ''}">${money(num(s.income) - num(s.expenses))}</td><td class="money">${money(s.ad_spend)}</td></tr>`).join('')}</tbody></table></div>
+      <div class="table-wrap" id="chartTable" hidden><table class="t"><thead><tr><th>Month</th><th class="money">Received</th><th class="money">Billed</th></tr></thead>
+        <tbody>${d.series.map(s => `<tr class="static"><td>${s.label}</td><td class="money">${money(s.income)}</td><td class="money">${money(s.billed)}</td></tr>`).join('')}</tbody></table></div>
     </div>
     <div class="dash-grid">
       <div class="card"><div class="card-h"><h2>Biggest balances</h2><a href="#debtors">All debtors</a></div>
-        ${d.topDebtors.length ? `<ul class="list">${d.topDebtors.map(t => `<li><div><a href="#client/${t.client_id}" style="color:inherit;font-weight:600;text-decoration:none">${esc(t.client_name)}</a><div class="sub">${t.days > 0 ? `<span class="neg">${t.days} days overdue</span>` : 'Not yet due'}</div></div><div><strong>${money(t.balance)}</strong></div></li>`).join('')}</ul>` : '<p class="empty">Nobody owes you anything right now.</p>'}</div>
+        ${d.topDebtors.length ? `<ul class="list">${d.topDebtors.map(t => `<li><div><a href="#client/${t.client_id}" style="color:inherit;font-weight:600;text-decoration:none">${esc(t.client_name)}</a><div class="sub">${t.billing === 'retainer' ? 'Retainer' : 'Once-off'}</div></div><div><strong>${money(t.balance)}</strong></div></li>`).join('')}</ul>` : '<p class="empty">Nobody owes you anything right now.</p>'}</div>
       <div class="card"><div class="card-h"><h2>Contracts ending soon</h2><a href="#contracts">All contracts</a></div>
         ${d.ending.length ? `<ul class="list">${d.ending.map(k => `<li><div><strong>${esc(k.client_name)}</strong><div class="sub">${esc(k.title)}</div></div><div><span class="neg">${dt(k.end_date)}</span><div class="sub">${money(k.value)}${k.kind === 'retainer' ? ' /mo' : ''}</div></div></li>`).join('')}</ul>` : '<p class="empty">No contracts end in the next 45 days.</p>'}</div>
-      <div class="card"><div class="card-h"><h2>Latest payments</h2><a href="#payments">All payments</a></div>
-        ${d.recentPayments.length ? `<ul class="list">${d.recentPayments.map(p => `<li><div><strong>${esc(p.client_name)}</strong><div class="sub">${dt(p.paid_on)} · ${esc(p.method)}${p.invoice_number ? ' · ' + esc(p.invoice_number) : ''}</div></div><div class="pos"><strong>${money(p.amount)}</strong></div></li>`).join('')}</ul>` : '<p class="empty">No payments recorded yet.</p>'}</div>
+      <div class="card"><div class="card-h"><h2>Latest payments</h2><a href="#transactions">All transactions</a></div>
+        ${d.recentPayments.length ? `<ul class="list">${d.recentPayments.map(p => `<li><div><strong>${esc(p.client_name)}</strong><div class="sub">${dt(p.paid_on)}${p.description ? ' · ' + esc(p.description) : ''}</div></div><div class="pos"><strong>${money(p.amount)}</strong></div></li>`).join('')}</ul>` : '<p class="empty">No payments recorded yet.</p>'}</div>
     </div>`;
   $('[data-tbl]', main).onclick = (e) => { const t = $('#chartTable'); t.hidden = !t.hidden; $('#chart').hidden = !t.hidden; e.target.textContent = t.hidden ? 'Show table' : 'Show chart'; };
   drawChart($('#chart'), d.series);
@@ -961,7 +938,7 @@ async function dashboardView() {
 
 function drawChart(el, series) {
   const W = Math.max(el.clientWidth - 36, 320), H = 260, padL = 58, padB = 28, padT = 10;
-  const max = Math.max(1, ...series.flatMap(s => [num(s.income), num(s.expenses)]));
+  const max = Math.max(1, ...series.flatMap(s => [num(s.income), num(s.billed)]));
   const step = niceStep(max / 4), top = Math.ceil(max / step) * step;
   const y = (v) => padT + (H - padT - padB) * (1 - v / top);
   const band = (W - padL) / series.length, bw = Math.min(18, (band - 10) / 2);
@@ -970,20 +947,20 @@ function drawChart(el, series) {
   const bar = (x, v, color) => { const h = y(0) - y(v); if (h <= 0) return ''; const r = Math.min(4, h); return `<path d="M${x},${y(0)} V${y(v) + r} Q${x},${y(v)} ${x + r},${y(v)} H${x + bw - r} Q${x + bw},${y(v)} ${x + bw},${y(v) + r} V${y(0)} Z" fill="${color}"/>`; };
   series.forEach((s, i) => {
     const cx = padL + band * i + band / 2;
-    g += bar(cx - bw - 1, num(s.income), 'var(--income)') + bar(cx + 1, num(s.expenses), 'var(--expense)');
+    g += bar(cx - bw - 1, num(s.income), 'var(--income)') + bar(cx + 1, num(s.billed), 'var(--expense)');
     g += `<text x="${cx}" y="${H - 8}" text-anchor="middle" font-size="11" fill="#6b7690">${s.label.split(' ')[0]}</text>`;
     g += `<rect class="hit" data-i="${i}" x="${padL + band * i}" y="${padT}" width="${band}" height="${H - padT - padB}" fill="transparent"/>`;
   });
-  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Bar chart of monthly income and expenses for the last 12 months">${g}</svg><div class="tip" hidden></div>`;
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Bar chart of money received and billed for the last 12 months">${g}</svg><div class="tip" hidden></div>`;
   const tip = $('.tip', el), svg = $('svg', el);
   svg.querySelectorAll('.hit').forEach(r => {
     r.addEventListener('mouseenter', () => {
       const s = series[r.dataset.i];
       const bb = r.getBoundingClientRect(), eb = el.getBoundingClientRect();
-      tip.innerHTML = `<b>${s.label}</b><span>Income <em style="font-style:normal">${money(s.income)}</em></span><span>Expenses <em style="font-style:normal">${money(s.expenses)}</em></span><span>Profit <em style="font-style:normal">${money(num(s.income) - num(s.expenses))}</em></span>`;
+      tip.innerHTML = `<b>${s.label}</b><span>Received <em style="font-style:normal">${money(s.income)}</em></span><span>Billed <em style="font-style:normal">${money(s.billed)}</em></span>`;
       tip.hidden = false;
       tip.style.left = Math.min(Math.max(bb.left - eb.left + bb.width / 2, 90), eb.width - 90) + 'px';
-      tip.style.top = (y(Math.max(num(s.income), num(s.expenses))) * (svg.getBoundingClientRect().height / H) + 4) + 'px';
+      tip.style.top = (y(Math.max(num(s.income), num(s.billed))) * (svg.getBoundingClientRect().height / H) + 4) + 'px';
       r.setAttribute('fill', 'rgba(11,19,32,.04)');
     });
     r.addEventListener('mouseleave', () => { tip.hidden = true; r.setAttribute('fill', 'transparent'); });
@@ -997,11 +974,10 @@ async function settingsView() {
   const fields = [
     { k: 'business_name', l: 'Business name', full: true }, { k: 'phone', l: 'Phone' }, { k: 'email', l: 'Email', t: 'email' },
     { k: 'address', l: 'Address', t: 'textarea' },
-    { k: 'bank_details', l: 'Banking details', t: 'textarea', hint: 'Printed on every invoice' },
-    { k: 'invoice_footer', l: 'Invoice footer note', t: 'textarea' },
+    { k: 'bank_details', l: 'Banking details', t: 'textarea', hint: 'For statements and payment reminders' },
   ];
-  $('#main').innerHTML = `<div class="page-head"><div><h1>Settings</h1><p class="sub">Business details printed on invoices.</p></div></div>
-    <form class="card fgrid" style="padding:22px;max-width:760px" id="setForm">${(await Promise.all(fields.map(f => fieldHTML({ ...f, req: true }, s[f.k])))).join('')}
+  $('#main').innerHTML = `<div class="page-head"><div><h1>Settings</h1><p class="sub">Your business details.</p></div></div>
+    <form class="card fgrid" style="padding:22px;max-width:760px" id="setForm">${(await Promise.all(fields.map(f => fieldHTML(f, s[f.k])))).join('')}
     <div class="full"><button class="btn primary" type="submit">Save settings</button></div></form>`;
   $('#setForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1017,7 +993,7 @@ async function route() {
   document.querySelectorAll('.side a.nav').forEach(a => a.classList.toggle('active', a.dataset.v === (view === 'client' ? 'clients' : view)));
   try {
     if (view === 'dashboard') await dashboardView();
-    else if (view === 'invoices') { if (arg) sessionStorage.setItem('inv_filter', arg); await invoicesView(); }
+    else if (view === 'retainers') await retainersView(arg);
     else if (view === 'debtors') await debtorsView();
     else if (view === 'client') await clientView(arg);
     else if (view === 'settings') await settingsView();
