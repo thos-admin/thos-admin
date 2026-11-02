@@ -429,6 +429,12 @@ async function allocatePayment(db, tx) {
     left -= Number(m.amount);
     ticked.push(monthLabel(m.year, m.month));
   }
+  // Balance fully cleared? Then any months still "not received" (e.g. ones inside the opening balance) are paid too.
+  const bal = (await db.query(`select charges - paid as b from client_balances where client_id=$1`, [tx.client_id])).rows[0];
+  if (bal && Number(bal.b) <= 0.001) {
+    const rest = (await db.query(`update retainer_months set status='rec', tx_id=$1 where client_id=$2 and status='not_rec' returning year, month`, [tx.id, tx.client_id])).rows;
+    rest.sort((x, y) => x.year - y.year || x.month - y.month).forEach((m) => ticked.push(monthLabel(m.year, m.month)));
+  }
   return ticked;
 }
 async function releasePayment(db, txId) {
@@ -681,7 +687,7 @@ app.get('/api/admin/debtors', wrap(async (req, res) => {
          from retainer_months m where m.client_id=c.id and m.status='not_rec') as unpaid_months,
       (select max(tx_date) from transactions t where t.client_id=c.id and t.type='payment') as last_paid
     from clients c join client_balances b on b.client_id=c.id
-    where ${BAL} <> 0 or exists (select 1 from transactions t where t.client_id=c.id)   -- paid-up clients too, for the "Paid up" filter
+    where ${BAL} <> 0 or (c.billing='retainer' and c.retainer_active) or exists (select 1 from transactions t where t.client_id=c.id)
     order by ${BAL} desc, lower(c.name)`);
   res.json(rows);
 }));
@@ -810,6 +816,11 @@ alter table lead_activity enable row level security;
 alter table lead_proofs   enable row level security;
 
 alter table transactions add column if not exists imported boolean not null default false;
+-- clients who already paid everything off: tick their leftover months
+update retainer_months m set status = 'rec'
+where m.status = 'not_rec' and m.amount = 0
+  and exists (select 1 from client_balances b where b.client_id = m.client_id and b.charges - b.paid <= 0)
+  and exists (select 1 from transactions t where t.client_id = m.client_id and t.type = 'payment' and not t.imported);
 `;
 async function migrate() {
   try { await pool.query(MIGRATION); console.log('[db] tables up to date'); }
