@@ -1053,6 +1053,7 @@ async function debtorsView() {
   $('[data-pay]', main).onclick = () => editRecord(CFG.transactions, {}, { type: 'payment' });
   const all = await A('/debtors');
   const owing = all.filter(r => num(r.balance) > 0);
+  const activeRet = (r) => r.billing === 'retainer' && r.retainer_active;
   const S = (k, rows = owing) => rows.reduce((a, r) => a + num(r[k]), 0);
   const credit = all.filter(r => num(r.balance) < 0);
   $('.stat-grid', main).innerHTML = [
@@ -1070,9 +1071,9 @@ async function debtorsView() {
     const qv = $('input', tb).value.trim().toLowerCase(), ty = $('[data-type]', tb).value;
     main.querySelectorAll('.kpi.pick').forEach(c => c.classList.toggle('on', c.dataset.f === ty));
     const rows = all.filter(r => (!qv || r.name.toLowerCase().includes(qv))
-      && (ty === 'paid' ? num(r.balance) === 0 : num(r.balance) !== 0)
-      && (!ty || ty === 'paid' || (ty === 'credit' ? num(r.balance) < 0 : num(r.balance) > 0 && (ty === 'retainer' ? r.billing === 'retainer' : r.billing !== 'retainer'))));
-    $('.count', tb).textContent = ty === 'paid' ? `${rows.length} paid up` : `${rows.length} owing`;
+      && (ty === 'paid' ? num(r.balance) === 0 : num(r.balance) !== 0 || activeRet(r))   // active retainers always stay on the list
+      && (!ty || ty === 'paid' || (ty === 'credit' ? num(r.balance) < 0 : ty === 'retainer' ? r.billing === 'retainer' && (num(r.balance) > 0 || activeRet(r)) : r.billing !== 'retainer' && num(r.balance) > 0)));
+    $('.count', tb).textContent = ty === 'paid' ? `${rows.length} paid up` : `${rows.filter(r => num(r.balance) > 0).length} owing · ${rows.filter(r => !num(r.balance)).length} paid up`;
     const card = $('.card.table-wrap', main);
     if (!rows.length) { card.innerHTML = `<p class="empty">${ty === 'paid' ? 'No paid-up clients yet.' : 'Nobody here owes you anything.'}</p>`; return; }
     card.innerHTML = `<table class="t"><thead><tr><th>Client</th><th>Unpaid months</th><th>Last payment</th><th class="money">Total owed</th><th></th></tr></thead>
@@ -1082,7 +1083,7 @@ async function debtorsView() {
         return `<tr data-id="${r.id}" tabindex="0"><td><strong>${esc(r.name)}</strong><div class="muted" style="font-size:12px">${r.billing === 'retainer' ? 'Retainer' + (r.retainer_active ? '' : ' (cancelled)') : 'Once-off'}</div></td>
           <td style="max-width:260px;font-size:13px" class="${r.unpaid_months ? 'neg' : 'muted'}">${esc(r.unpaid_months || '–')}</td>
           <td>${dt(r.last_paid)}</td>
-          <td class="money"><strong class="${num(r.balance) < 0 ? 'pos' : ''}">${num(r.balance) < 0 ? 'In credit ' + money(-r.balance) : money(r.balance)}</strong></td>
+          <td class="money">${!num(r.balance) ? '<span class="pill good">Paid up</span>' : `<strong class="${num(r.balance) < 0 ? 'pos' : ''}">${num(r.balance) < 0 ? 'In credit ' + money(-r.balance) : money(r.balance)}</strong>`}</td>
           <td style="white-space:nowrap"><button class="btn sm" data-bal="${r.id}">Edit</button> ${num(r.balance) > 0 ? `<button class="btn sm" data-paid="${r.id}">Paid</button> ` : ''}${wa && num(r.balance) > 0 ? `<a class="btn sm" target="_blank" rel="noopener" onclick="event.stopPropagation()" href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}">Remind</a>` : ''}</td></tr>`; }).join('')}</tbody>
       <tfoot><tr class="static"><td colspan="3">Total</td><td class="money">${money(S('balance', rows))}</td><td></td></tr></tfoot></table>`;
     card.querySelectorAll('tbody tr').forEach(tr => { tr.onclick = () => location.hash = 'client/' + tr.dataset.id; tr.onkeydown = e => { if (e.key === 'Enter') tr.onclick(); }; });
