@@ -187,7 +187,10 @@ async function checkNewPassword(pw, exceptId) {
 }
 
 // Salespeople can only reach the leads routes, and can't delete anything.
-const SALES_OK = /^\/api\/admin\/(me|lead-stats|leads(\/\d+(\/(activity|contact))?)?|proofs\/\d+)$/;
+const ALLOWED = {
+  sales: /^\/api\/admin\/(me|lead-stats|leads(\/\d+(\/(activity|contact))?)?|proofs\/\d+)$/,
+  staff: /^\/api\/admin\/(me|time|time\/(clients|clock-in|clock-out))$/,
+};
 async function auth(req, res, next) {
   const h = req.headers.authorization || '';
   const path = req.originalUrl.split('?')[0];
@@ -200,7 +203,8 @@ async function auth(req, res, next) {
     const u = (await q('select active from app_users where id=$1', [req.user.uid])).rows[0];
     if (!u || !u.active) return res.status(401).json({ error: 'Your login has been switched off. Speak to the owner.' });
   } catch (e) { return res.status(500).json({ error: 'Something went wrong on the server.' }); }
-  if (!SALES_OK.test(path) || req.method === 'DELETE') return res.status(403).json({ error: 'You don\'t have access to that.' });
+  const ok = ALLOWED[req.user.role];
+  if (!ok || !ok.test(path) || req.method === 'DELETE') return res.status(403).json({ error: 'You don\'t have access to that.' });
   next();
 }
 app.use('/api/admin', auth);
@@ -333,21 +337,95 @@ app.get('/api/admin/lead-stats', wrap(async (req, res) => {
   res.json(rows);
 }));
 
+// ---------- time tracking: employees clock in / out per client ----------
+// Hours are worked out from the start and end times. Cost = hours x the rate saved on the entry.
+const TIME_SELECT = `select t.*, c.name as client_name,
+    round((extract(epoch from (coalesce(t.ended_at, now()) - t.started_at)) / 3600.0)::numeric, 2) as hours
+  from time_entries t join clients c on c.id = t.client_id`;
+
+app.get('/api/admin/time/clients', wrap(async (req, res) => {
+  res.json((await q(`select id, name, billing, retainer_active from clients order by (billing='retainer' and retainer_active) desc, lower(name)`)).rows);
+}));
+
+app.post('/api/admin/time/clock-in', wrap(async (req, res) => {
+  const b = req.body || {}, u = who(req);
+  if (!u.id) throw badReq('Clocking in is for employee logins.');
+  if (!b.client_id) throw badReq('Choose the client you are working on.');
+  const out = await inTx(async (db) => {
+    // switching client? close the running one first
+    await db.query(`update time_entries set ended_at = now() where user_id = $1 and ended_at is null`, [u.id]);
+    const rate = (await db.query('select hourly_rate from app_users where id=$1', [u.id])).rows[0]?.hourly_rate || 0;
+    return (await db.query(`insert into time_entries (user_id, user_name, client_id, started_at, note, rate) values ($1,$2,$3,now(),$4,$5) returning *`,
+      [u.id, u.name, b.client_id, toNull(b.note), rate])).rows[0];
+  });
+  res.json(out);
+}));
+
+app.post('/api/admin/time/clock-out', wrap(async (req, res) => {
+  const b = req.body || {}, u = who(req);
+  const e = (await q(`update time_entries set ended_at = now(), note = coalesce($2, note) where user_id = $1 and ended_at is null returning *`, [u.id, toNull(b.note)])).rows[0];
+  if (!e) throw badReq("You're not clocked in.");
+  res.json(e);
+}));
+
+// employees: their own entries (last 60 days). owner: everyone, with filters.
+app.get('/api/admin/time', wrap(async (req, res) => {
+  if (!isAdmin(req)) {
+    const { rows } = await q(`${TIME_SELECT} where t.user_id = $1 and t.started_at >= now() - interval '60 days' order by t.started_at desc`, [req.user.uid]);
+    return res.json(rows.map(({ rate, ...r }) => r)); // employees don't see rates
+  }
+  const { rows } = await q(`${TIME_SELECT} where t.started_at >= now() - interval '400 days' order by t.started_at desc`);
+  res.json(rows);
+}));
+
+function timeBody(b) {
+  const start = b.started_at ? new Date(b.started_at) : null, end = b.ended_at ? new Date(b.ended_at) : null;
+  if (!b.user_id) throw badReq('Choose the employee.');
+  if (!b.client_id) throw badReq('Choose the client.');
+  if (!start || isNaN(start)) throw badReq('Add a start time.');
+  if (end && (isNaN(end) || end <= start)) throw badReq('The end time must be after the start time.');
+  if (end && end - start > 24 * 3600e3) throw badReq('One entry can be at most 24 hours.');
+  return { start, end };
+}
+app.post('/api/admin/time', wrap(async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: "You don't have access to that." });
+  const b = req.body || {}, { start, end } = timeBody(b);
+  const u = (await q('select name, hourly_rate from app_users where id=$1', [b.user_id])).rows[0];
+  if (!u) throw badReq('Choose the employee.');
+  const rate = b.rate !== undefined && b.rate !== '' ? Number(b.rate) || 0 : u.hourly_rate;
+  res.json((await q(`insert into time_entries (user_id, user_name, client_id, started_at, ended_at, note, rate, edited)
+    values ($1,$2,$3,$4,$5,$6,$7,true) returning *`, [b.user_id, u.name, b.client_id, start, end, toNull(b.note), rate])).rows[0]);
+}));
+app.put('/api/admin/time/:id', wrap(async (req, res) => {
+  const b = req.body || {}, { start, end } = timeBody(b);
+  const u = (await q('select name from app_users where id=$1', [b.user_id])).rows[0];
+  const e = (await q(`update time_entries set user_id=$1, user_name=coalesce($2, user_name), client_id=$3, started_at=$4, ended_at=$5, note=$6,
+      rate=coalesce($7, rate), edited=true where id=$8 returning *`,
+    [b.user_id, u && u.name, b.client_id, start, end, toNull(b.note), b.rate === undefined || b.rate === '' ? null : Number(b.rate) || 0, req.params.id])).rows[0];
+  if (!e) { const er = new Error('gone'); er.status = 404; throw er; }
+  res.json(e);
+}));
+app.delete('/api/admin/time/:id', wrap(async (req, res) => {
+  await q('delete from time_entries where id=$1', [req.params.id]);
+  res.json({ ok: true });
+}));
+
 // ---------- team logins (owner only) ----------
 app.get('/api/admin/users', wrap(async (req, res) => {
-  const { rows } = await q(`select u.id, u.name, u.username, u.role, u.active, u.created_at,
-      (select max(created_at) from lead_activity a where a.user_id=u.id) as last_at
+  const { rows } = await q(`select u.id, u.name, u.username, u.role, u.active, u.created_at, u.hourly_rate,
+      greatest((select max(created_at) from lead_activity a where a.user_id=u.id), (select max(coalesce(ended_at, started_at)) from time_entries t where t.user_id=u.id)) as last_at
     from app_users u order by u.active desc, lower(u.name)`);
   res.json(rows);
 }));
 app.post('/api/admin/users', wrap(async (req, res) => {
   const b = req.body || {};
   const name = String(b.name || '').trim(), pw = String(b.password || '');
+  const role = b.role === 'staff' ? 'staff' : 'sales', rate = Math.max(0, Number(b.hourly_rate) || 0);
   if (!name) throw badReq('Add their name.');
   await checkNewPassword(pw);
   const username = (name.toLowerCase().replace(/[^a-z0-9]+/g, '.') || 'user') + '.' + crypto.randomBytes(3).toString('hex'); // internal only
   try {
-    const u = (await q(`insert into app_users (name, username, password_hash) values ($1,$2,$3) returning id, name, username, active`, [name, username, await bcrypt.hash(pw, 10)])).rows[0];
+    const u = (await q(`insert into app_users (name, username, password_hash, role, hourly_rate) values ($1,$2,$3,$4,$5) returning id, name, username, role, hourly_rate, active`, [name, username, await bcrypt.hash(pw, 10), role, rate])).rows[0];
     res.json(u);
   } catch (e) { if (e.code === '23505') throw badReq('Try again.'); throw e; }
 }));
@@ -355,10 +433,12 @@ app.put('/api/admin/users/:id', wrap(async (req, res) => {
   const b = req.body || {}, sets = [], vals = [];
   if (typeof b.name === 'string' && b.name.trim()) { vals.push(b.name.trim()); sets.push(`name=$${vals.length}`); }
   if (typeof b.active === 'boolean') { vals.push(b.active); sets.push(`active=$${vals.length}`); }
+  if (b.hourly_rate !== undefined && b.hourly_rate !== '') { vals.push(Math.max(0, Number(b.hourly_rate) || 0)); sets.push(`hourly_rate=$${vals.length}`); }
+  if (['sales', 'staff'].includes(b.role)) { vals.push(b.role); sets.push(`role=$${vals.length}`); }
   if (b.password) { await checkNewPassword(String(b.password), req.params.id); vals.push(await bcrypt.hash(String(b.password), 10)); sets.push(`password_hash=$${vals.length}`); }
   if (!sets.length) throw badReq('Nothing to save.');
   vals.push(req.params.id);
-  const u = (await q(`update app_users set ${sets.join(',')} where id=$${vals.length} returning id, name, username, active`, vals)).rows[0];
+  const u = (await q(`update app_users set ${sets.join(',')} where id=$${vals.length} returning id, name, username, role, hourly_rate, active`, vals)).rows[0];
   if (!u) { const e = new Error('gone'); e.status = 404; throw e; }
   res.json(u);
 }));
@@ -776,7 +856,7 @@ create table if not exists app_users (
   name          text not null,
   username      text not null unique,
   password_hash text not null,
-  role          text not null default 'sales' check (role in ('sales')),
+  role          text not null default 'sales',
   active        boolean not null default true,
   created_at    timestamptz not null default now()
 );
@@ -816,6 +896,27 @@ alter table lead_activity enable row level security;
 alter table lead_proofs   enable row level security;
 
 alter table transactions add column if not exists imported boolean not null default false;
+-- employees + time tracking
+alter table app_users add column if not exists hourly_rate numeric(10,2) not null default 0;
+alter table app_users drop constraint if exists app_users_role_check;
+alter table app_users add constraint app_users_role_check check (role in ('sales','staff'));
+create table if not exists time_entries (
+  id          bigserial primary key,
+  user_id     bigint references app_users(id) on delete set null,
+  user_name   text not null,
+  client_id   bigint not null references clients(id) on delete cascade,
+  started_at  timestamptz not null,
+  ended_at    timestamptz,
+  note        text,
+  rate        numeric(10,2) not null default 0,
+  edited      boolean not null default false,
+  created_at  timestamptz not null default now()
+);
+create index if not exists idx_time_user on time_entries(user_id);
+create index if not exists idx_time_client on time_entries(client_id);
+create index if not exists idx_time_start on time_entries(started_at);
+create unique index if not exists one_running_timer on time_entries(user_id) where ended_at is null;
+alter table time_entries enable row level security;
 -- clients who already paid everything off: tick their leftover months
 update retainer_months m set status = 'rec'
 where m.status = 'not_rec' and m.amount = 0
