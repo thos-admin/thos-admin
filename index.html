@@ -223,7 +223,20 @@ a.kpi:hover{border-color:var(--line-2)}
 .ystrip .ml{font-size:11px;color:var(--muted);text-align:center}
 .tx-in{color:var(--good)} .tx-out{color:var(--bad)}
 .m-only{display:none}
-body.sales .side .nav:not([data-v=leads]), body.sales .side-group, body.sales .side-foot .own{display:none}
+body.limited .side .nav:not(.allow), body.limited .side-group, body.limited .side-foot .own{display:none}
+.clock{padding:22px;margin-bottom:16px}
+.clock .big{font-size:40px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.clock .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:14px}
+.clock .row > *{flex:1 1 220px}
+.clock .row .btn{flex:0 0 auto;padding:12px 22px;font-size:16px}
+.clock select,.clock input{width:100%;padding:11px 12px;border:1px solid var(--line-2);border-radius:10px;font:inherit;background:#fff}
+.btn.go{background:var(--good);color:#fff;border-color:var(--good)}
+.btn.stop{background:var(--bad);color:#fff;border-color:var(--bad)}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--good)}
+.live:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--good);animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.now-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.now-chips span{background:var(--good-bg);color:var(--good);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600}
 .side-foot .who{display:block;font-size:12px;color:#8a94a8;margin-bottom:6px}
 .lead-head{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-bottom:16px}
 .lead-head .card{padding:14px 16px}
@@ -288,6 +301,7 @@ body.sales .side .nav:not([data-v=leads]), body.sales .side-group, body.sales .s
     <a class="nav" href="#clients" data-v="clients">Clients</a>
     <a class="nav" href="#contracts" data-v="contracts">Contracts</a>
     <a class="nav" href="#leads" data-v="leads">Leads <span class="badge" id="leadBadge" hidden></span></a>
+    <a class="nav" href="#time" data-v="time">Time</a>
     <div class="side-group">Money</div>
     <a class="nav" href="#transactions" data-v="transactions">Transactions</a>
     <a class="nav" href="#retainers" data-v="retainers">Retainers</a>
@@ -334,6 +348,7 @@ const pill = (s) => s ? `<span class="pill ${PILL[s] || 'mute'}">${esc(s[0].toUp
 let token = localStorage.getItem('thos_token');
 let ME = null;               // { role: 'admin' | 'sales', name }
 const isOwner = () => !!ME && ME.role === 'admin';
+const homeView = () => !ME ? '' : ME.role === 'admin' ? 'dashboard' : ME.role === 'staff' ? 'time' : 'leads';
 const cache = {};
 
 async function api(path, opts = {}) {
@@ -363,7 +378,7 @@ function showLogin(msg) {
   $('#loginErr').textContent = msg || '';
   setTimeout(() => $('#pw').focus(), 50);
 }
-function logout(msg) { token = null; ME = null; localStorage.removeItem('thos_token'); document.body.classList.remove('sales'); showLogin(msg); }
+function logout(msg) { token = null; ME = null; localStorage.removeItem('thos_token'); document.body.classList.remove('limited'); clearInterval(window.__tick); showLogin(msg); }
 $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = e.target.querySelector('button'); btn.disabled = true;
@@ -863,29 +878,181 @@ async function leadView(id) {
   };
 }
 
+/* ================= time tracking ================= */
+const dateSA = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ });
+const fmtH = (h) => { h = num(h); const m = Math.round(h * 60); return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`; };
+const hoursOf = (e) => (new Date(e.ended_at || Date.now()) - new Date(e.started_at)) / 3600e3;
+const weekStartSA = () => { const d = new Date(todaySA() + 'T12:00:00'); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.toLocaleDateString('en-CA'); };
+const localInput = (iso) => { if (!iso) return ''; const d = new Date(iso), z = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`; };
+const TIME_PERIODS = [['week', 'This week'], ['today', 'Today'], ['month', 'This month'], ['last', 'Last month'], ['all', 'Last 12 months']];
+function inTimePeriod(e, p) {
+  const d = dateSA(e.started_at), t = todaySA();
+  if (p === 'today') return d === t;
+  if (p === 'week') return d >= weekStartSA();
+  if (p === 'month') return d.slice(0, 7) === t.slice(0, 7);
+  if (p === 'last') { const x = new Date(t + 'T12:00:00'); x.setDate(1); x.setMonth(x.getMonth() - 1); return d.slice(0, 7) === x.toLocaleDateString('en-CA').slice(0, 7); }
+  return true;
+}
+
+async function timeView() {
+  return isOwner() ? timeOwnerView() : timeStaffView();
+}
+
+async function timeStaffView() {
+  const main = $('#main');
+  main.innerHTML = `<div class="page-head"><div><h1>Time</h1><p class="sub">Clock in when you start working on a client, clock out when you stop.</p></div></div><p class="empty">Loading…</p>`;
+  const [cl, mine] = await Promise.all([A('/time/clients'), A('/time')]);
+  const run = mine.find(e => !e.ended_at);
+  const sum = (f) => mine.filter(f).reduce((a, e) => a + hoursOf(e), 0);
+  const opts = (sel) => cl.map(c => `<option value="${c.id}"${String(c.id) === String(sel) ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
+  $('.empty', main).outerHTML = `
+    <div class="card clock">
+      ${run ? `<div class="live">Clocked in</div>
+        <div style="font-size:20px;font-weight:700;margin-top:6px">${esc(run.client_name)}</div>
+        <div class="big" data-elapsed>${fmtH(hoursOf(run))}</div>
+        <div class="muted" style="font-size:14px">Since ${hm(run.started_at)}${run.note ? ' · ' + esc(run.note) : ''}</div>
+        <div class="row"><div><label class="muted" for="t_note" style="font-size:13px">What did you do? <span style="font-weight:400">(optional)</span></label><input id="t_note" placeholder="For example: Homepage design, 3 posts scheduled"></div>
+          <button class="btn stop" type="button" data-out>Clock out</button></div>
+        <div class="row"><div><label class="muted" for="t_sw" style="font-size:13px">Moving to another client?</label><select id="t_sw"><option value="">Choose client…</option>${opts()}</select></div>
+          <button class="btn" type="button" data-switch>Switch</button></div>`
+      : `<div class="muted" style="font-size:14px;font-weight:600">Not clocked in</div>
+        <div class="row"><div><label class="muted" for="t_c" style="font-size:13px">Which client are you working on?</label><select id="t_c"><option value="">Choose client…</option>${opts()}</select></div>
+          <div><label class="muted" for="t_n" style="font-size:13px">Task <span style="font-weight:400">(optional)</span></label><input id="t_n" placeholder="For example: Logo design"></div>
+          <button class="btn go" type="button" data-in>Clock in</button></div>`}
+    </div>
+    <div class="stat-grid">
+      <div class="card kpi"><div class="k-label">Today</div><div class="k-val">${fmtH(sum(e => dateSA(e.started_at) === todaySA()))}</div></div>
+      <div class="card kpi"><div class="k-label">This week</div><div class="k-val">${fmtH(sum(e => dateSA(e.started_at) >= weekStartSA()))}</div></div>
+    </div>
+    <div class="card table-wrap">${mine.length ? `<table class="t"><thead><tr><th>Date</th><th>Client</th><th>Time</th><th class="money">Hours</th></tr></thead><tbody>${mine.slice(0, 80).map(e => `<tr class="static">
+      <td>${dt(dateSA(e.started_at))}</td><td><strong>${esc(e.client_name)}</strong>${e.note ? `<div class="muted" style="font-size:13px">${esc(e.note)}</div>` : ''}</td>
+      <td style="white-space:nowrap">${hm(e.started_at)} – ${e.ended_at ? hm(e.ended_at) : '<span class="live">now</span>'}</td><td class="money">${fmtH(hoursOf(e))}</td></tr>`).join('')}</tbody></table>`
+      : '<p class="empty">Nothing yet. Clock in to start.</p>'}</div>`;
+  if (run) {
+    const el = $('[data-elapsed]', main);
+    window.__tick = setInterval(() => { el.textContent = fmtH(hoursOf(run)); }, 20000);
+    $('[data-out]', main).onclick = async (e) => {
+      e.target.disabled = true;
+      try { const r = await A('/time/clock-out', { method: 'POST', body: { note: $('#t_note').value } }); toast(`Clocked out · ${fmtH(hoursOf(r))} on ${run.client_name}`); timeStaffView(); }
+      catch (err) { toast(err.message, true); e.target.disabled = false; }
+    };
+    $('[data-switch]', main).onclick = async () => {
+      const c = $('#t_sw').value; if (!c) return toast('Choose the client you are moving to.', true);
+      try { await A('/time/clock-in', { method: 'POST', body: { client_id: c } }); toast('Switched client'); timeStaffView(); } catch (err) { toast(err.message, true); }
+    };
+  } else {
+    $('[data-in]', main).onclick = async (e) => {
+      const c = $('#t_c').value; if (!c) return toast('Choose the client first.', true);
+      e.target.disabled = true;
+      try { await A('/time/clock-in', { method: 'POST', body: { client_id: c, note: $('#t_n').value } }); toast('Clocked in'); timeStaffView(); }
+      catch (err) { toast(err.message, true); e.target.disabled = false; }
+    };
+  }
+}
+
+async function timeOwnerView() {
+  const main = $('#main');
+  const st = JSON.parse(sessionStorage.getItem('time_f') || '{}');
+  main.innerHTML = `<div class="page-head"><div><h1>Time</h1><p class="sub">Hours your employees clocked per client.</p></div><div class="actions"><button class="btn primary" data-add>Add time</button></div></div>
+    <div data-now></div><div class="stat-grid" data-kpi></div>
+    <div class="toolbar"><select data-p aria-label="Period">${TIME_PERIODS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+      <select data-u aria-label="Employee"><option value="">Everyone</option></select><select data-c aria-label="Client"><option value="">All clients</option></select><span class="count"></span></div>
+    <div class="dash-grid" style="grid-template-columns:1fr 1fr;margin-bottom:16px" data-sum></div>
+    <div class="card table-wrap" data-list><p class="empty">Loading…</p></div>`;
+  const [all, users, cl] = await Promise.all([A('/time'), A('/users'), A('/time/clients')]);
+  const staff = users.filter(u => u.role === 'staff');
+  $('[data-add]', main).onclick = () => editTime({}, staff, cl);
+  const running = all.filter(e => !e.ended_at);
+  $('[data-now]', main).innerHTML = running.length ? `<div class="now-chips">${running.map(e => `<span>● ${esc(e.user_name)} · ${esc(e.client_name)} · since ${hm(e.started_at)}</span>`).join('')}</div>` : '';
+  const cost = (e) => hoursOf(e) * num(e.rate);
+  const H = (f) => all.filter(f).reduce((a, e) => a + hoursOf(e), 0), C = (f) => all.filter(f).reduce((a, e) => a + cost(e), 0);
+  $('[data-kpi]', main).innerHTML = [
+    ['Hours today', fmtH(H(e => dateSA(e.started_at) === todaySA())), running.length ? `${running.length} clocked in now` : 'Nobody clocked in'],
+    ['Hours this week', fmtH(H(e => dateSA(e.started_at) >= weekStartSA())), 'Since Monday'],
+    ['Hours this month', fmtH(H(e => inTimePeriod(e, 'month'))), MONTHS[new Date().getMonth()]],
+    ['Employees', staff.filter(u => u.active).length, '<a href="#settings">Add or change in Settings</a>'],
+  ].map(([l, v, n]) => `<div class="card kpi"><div class="k-label">${l}</div><div class="k-val">${v}</div><div class="k-note">${n}</div></div>`).join('');
+  const tb = $('.toolbar', main);
+  $('[data-u]', tb).innerHTML += [...new Set(all.map(e => e.user_name))].sort().map(n => `<option>${esc(n)}</option>`).join('');
+  $('[data-c]', tb).innerHTML += [...new Map(all.map(e => [String(e.client_id), e.client_name])).entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('');
+  $('[data-p]', tb).value = st.p || 'week'; $('[data-u]', tb).value = st.u || ''; $('[data-c]', tb).value = st.c || '';
+  const draw = () => {
+    const p = $('[data-p]', tb).value, u = $('[data-u]', tb).value, c = $('[data-c]', tb).value;
+    sessionStorage.setItem('time_f', JSON.stringify({ p, u, c }));
+    const list = all.filter(e => inTimePeriod(e, p) && (!u || e.user_name === u) && (!c || String(e.client_id) === c));
+    const tot = list.reduce((a, e) => a + hoursOf(e), 0), totC = list.reduce((a, e) => a + cost(e), 0);
+    $('.count', tb).textContent = `${list.length} entries · ${fmtH(tot)}`;
+    const group = (key, label) => {
+      const m = new Map();
+      list.forEach(e => { const k = e[key]; const g = m.get(k) || { name: e[label], h: 0, c: 0 }; g.h += hoursOf(e); g.c += cost(e); m.set(k, g); });
+      return [...m.values()].sort((a, b) => b.h - a.h);
+    };
+    const box = (title, rows) => `<div class="card"><div class="card-h"><h2>${title}</h2></div>${rows.length ? `<table class="t"><thead><tr><th></th><th class="money">Hours</th></tr></thead><tbody>${rows.map(r => `<tr class="static"><td><strong>${esc(r.name)}</strong></td><td class="money">${fmtH(r.h)}</td></tr>`).join('')}</tbody></table>` : '<p class="empty">No time in this period.</p>'}</div>`;
+    $('[data-sum]', main).innerHTML = box('Per client', group('client_id', 'client_name')) + box('Per employee', group('user_name', 'user_name'));
+    const card = $('[data-list]', main);
+    card.innerHTML = list.length ? `<table class="t"><thead><tr><th>Date</th><th>Employee</th><th>Client</th><th>Time</th><th class="money">Hours</th></tr></thead><tbody>${list.map(e => `<tr data-id="${e.id}" tabindex="0">
+        <td style="white-space:nowrap">${dt(dateSA(e.started_at))}</td><td>${esc(e.user_name)}</td>
+        <td><strong>${esc(e.client_name)}</strong>${e.note ? `<div class="muted" style="font-size:13px">${esc(e.note)}</div>` : ''}</td>
+        <td style="white-space:nowrap">${hm(e.started_at)} – ${e.ended_at ? hm(e.ended_at) : '<span class="live">now</span>'}${e.edited ? ' <span class="pill mute" title="Added or changed by you">edited</span>' : ''}</td>
+        <td class="money">${fmtH(hoursOf(e))}</td></tr>`).join('')}</tbody></table>`
+      : '<p class="empty">No time logged in this period.</p>';
+    card.querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = () => editTime(all.find(e => String(e.id) === tr.dataset.id), staff, cl));
+  };
+  tb.addEventListener('change', draw); draw();
+  if (running.length) window.__tick = setInterval(() => { if (location.hash.startsWith('#time')) draw(); }, 60000);
+}
+
+function editTime(e, staff, cl) {
+  const isNew = !e.id;
+  const form = document.createElement('form'); form.className = 'fgrid'; form.noValidate = true;
+  const people = staff.some(u => String(u.id) === String(e.user_id)) || isNew ? staff : [...staff, { id: e.user_id, name: e.user_name }];
+  form.innerHTML = `
+    <div class="f"><label for="te_u">Employee</label><select id="te_u" name="user_id"><option value="">Choose…</option>${people.map(u => `<option value="${u.id}" ${String(u.id) === String(e.user_id) ? ' selected' : ''}>${esc(u.name)}</option>`).join('')}</select></div>
+    <div class="f"><label for="te_c">Client</label><select id="te_c" name="client_id"><option value="">Choose…</option>${cl.map(c => `<option value="${c.id}"${String(c.id) === String(e.client_id) ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
+    <div class="f"><label for="te_s">Started</label><input id="te_s" type="datetime-local" value="${localInput(e.started_at)}"></div>
+    <div class="f"><label for="te_e">Finished <span style="font-weight:400;color:var(--muted)">(empty = still clocked in)</span></label><input id="te_e" type="datetime-local" value="${localInput(e.ended_at)}"></div>
+    <div class="f full"><label for="te_n">Note <span style="font-weight:400;color:var(--muted)">(optional)</span></label><input id="te_n" value="${esc(e.note || '')}"></div>
+    <p class="form-err full" hidden></p>`;
+  const foot = document.createElement('div'); foot.style.cssText = 'display:contents';
+  foot.innerHTML = `${isNew ? '' : '<button class="btn danger" type="button" data-del>Delete</button>'}<div class="right"><button class="btn" type="button" data-cancel>Cancel</button><button class="btn primary" type="button" data-save>${isNew ? 'Add time' : 'Save changes'}</button></div>`;
+  const m = modal({ title: isNew ? 'Add time' : 'Edit time · ' + e.user_name, body: form, foot });
+  $('[data-cancel]', m.el).onclick = m.close;
+  const err = $('.form-err', form);
+  $('[data-save]', m.el).onclick = async () => {
+    const f = form.elements, body = { user_id: $('#te_u').value, client_id: $('#te_c').value, note: $('#te_n').value,
+      started_at: $('#te_s').value ? new Date($('#te_s').value).toISOString() : '', ended_at: $('#te_e').value ? new Date($('#te_e').value).toISOString() : null };
+    try { await A('/time' + (isNew ? '' : '/' + e.id), { method: isNew ? 'POST' : 'PUT', body }); m.close(); toast(isNew ? 'Time added' : 'Changes saved'); route(); }
+    catch (x) { err.hidden = false; err.textContent = x.message; }
+  };
+  const del = $('[data-del]', m.el);
+  if (del) del.onclick = async () => { if (!confirm('Delete this time entry?')) return; try { await A('/time/' + e.id, { method: 'DELETE' }); m.close(); toast('Deleted'); route(); } catch (x) { toast(x.message, true); } };
+}
+
 /* ================= team logins (owner) ================= */
 async function teamSection(el) {
   let users;
   try { users = await A('/users'); } catch (e) { el.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
   el.innerHTML = `<div class="card" style="padding:22px;max-width:760px;margin-top:18px">
-    <div class="card-h" style="padding:0 0 10px"><h2>Team logins</h2><button class="btn sm primary" type="button" data-adduser>Add salesperson</button></div>
-    <p class="muted" style="margin:0 0 12px;font-size:14px">Salespeople only see Leads. Each person gets their own password, and that's all they type to log in.</p>
-    ${users.length ? `<table class="t"><thead><tr><th>Name</th><th>Last activity</th><th></th></tr></thead><tbody>${users.map(u => `<tr class="static">
-      <td><strong>${esc(u.name)}</strong>${u.active ? '' : ' <span class="pill mute">Switched off</span>'}</td><td>${u.last_at ? dtt(u.last_at) : '<span class="muted">–</span>'}</td>
+    <div class="card-h" style="padding:0 0 10px"><h2>Team logins</h2><button class="btn sm primary" type="button" data-adduser>Add person</button></div>
+    <p class="muted" style="margin:0 0 12px;font-size:14px">Salespeople only see Leads. Employees only see Time, where they clock in and out per client. Each person gets their own password, and that's all they type to log in.</p>
+    ${users.length ? `<table class="t"><thead><tr><th>Name</th><th>Role</th><th>Last activity</th><th></th></tr></thead><tbody>${users.map(u => `<tr class="static">
+      <td><strong>${esc(u.name)}</strong>${u.active ? '' : ' <span class="pill mute">Switched off</span>'}</td><td>${u.role === 'staff' ? 'Employee' : 'Salesperson'}</td><td>${u.last_at ? dtt(u.last_at) : '<span class="muted">–</span>'}</td>
       <td style="white-space:nowrap;text-align:right"><button class="btn sm" type="button" data-pw="${u.id}">New password</button> <button class="btn sm" type="button" data-act="${u.id}" data-on="${u.active}">${u.active ? 'Switch off' : 'Switch on'}</button></td></tr>`).join('')}</tbody></table>`
       : '<p class="muted">No team logins yet.</p>'}</div>`;
   const reload = () => teamSection(el);
   $('[data-adduser]', el).onclick = () => {
     const form = document.createElement('form'); form.className = 'fgrid'; form.noValidate = true;
     form.innerHTML = `<div class="f full"><label for="u_n">Name</label><input id="u_n" name="name" placeholder="For example: Ahmed Khan"></div>
+      <div class="f"><label for="u_r">Role</label><select id="u_r" name="role"><option value="sales">Salesperson (Leads only)</option><option value="staff">Employee (Time only)</option></select></div>
       <div class="f full"><label for="u_p">Their password</label><input id="u_p" name="password" type="text" placeholder="At least 6 characters"></div><p class="form-err full" hidden></p>`;
     const foot = document.createElement('div'); foot.style.cssText = 'display:contents';
     foot.innerHTML = `<div class="right"><button class="btn" type="button" data-cancel>Cancel</button><button class="btn primary" type="button" data-save>Create login</button></div>`;
-    const m = modal({ title: 'Add salesperson', body: form, foot });
+    const m = modal({ title: 'Add person', body: form, foot });
+
     $('[data-cancel]', m.el).onclick = m.close;
     $('[data-save]', m.el).onclick = async () => {
       const f = form.elements;
-      try { await A('/users', { method: 'POST', body: { name: f.name.value, password: f.password.value } }); m.close(); toast(`Login created. Send ${f.name.value.trim().split(' ')[0]} their password: ${f.password.value}`); reload(); }
+      try { await A('/users', { method: 'POST', body: { name: f.name.value, password: f.password.value, role: f.role.value } }); m.close(); toast(`Login created. Send ${f.name.value.trim().split(' ')[0]} their password: ${f.password.value}`); reload(); }
       catch (e) { const er = $('.form-err', form); er.hidden = false; er.textContent = e.message; }
     };
   };
@@ -1260,8 +1427,9 @@ async function settingsView() {
 /* ================= router ================= */
 async function route() {
   if (!ME) return;   // not logged in yet
-  let h = location.hash.slice(1) || (isOwner() ? 'dashboard' : 'leads');
-  if (!isOwner() && !h.startsWith('leads')) { h = 'leads'; history.replaceState(null, '', '#leads'); }
+  clearInterval(window.__tick);
+  let h = location.hash.slice(1) || homeView();
+  if (!isOwner() && !h.startsWith(homeView())) { h = homeView(); history.replaceState(null, '', '#' + h); }
   const [view, arg] = h.split('/');
   $('#app').classList.remove('menu');
   document.querySelectorAll('.side a.nav').forEach(a => a.classList.toggle('active', a.dataset.v === (view === 'client' ? 'clients' : view)));
@@ -1269,6 +1437,7 @@ async function route() {
     if (view === 'dashboard') await dashboardView();
     else if (view === 'retainers') await retainersView(arg);
     else if (view === 'debtors') await debtorsView();
+    else if (view === 'time') await timeView();
     else if (view === 'client') await clientView(arg);
     else if (view === 'settings') await settingsView();
     else if (CFG[view]) await listView(CFG[view]);
@@ -1281,7 +1450,8 @@ let resizeT; addEventListener('resize', () => { clearTimeout(resizeT); resizeT =
 async function start() {
   $('#login').hidden = true; $('#app').hidden = false;
   try { ME = await A('/me'); } catch { return; }
-  document.body.classList.toggle('sales', !isOwner());
+  document.body.classList.toggle('limited', !isOwner());
+  document.querySelectorAll('.side .nav').forEach(a => a.classList.toggle('allow', a.dataset.v === homeView()));
   $('#whoAmI').textContent = 'Logged in as ' + ME.name;
   refreshLeadBadge(); route();
 }
