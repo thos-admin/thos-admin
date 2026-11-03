@@ -450,7 +450,8 @@ const monthLabel = (y, m) => `${MONTHS[m - 1]} ${y}`;
 
 const resources = {
   contracts: {
-    cols: ['client_id', 'title', 'kind', 'value', 'start_date', 'end_date', 'status', 'file_url', 'notes'],
+    cols: ['client_id', 'title', 'kind', 'value', 'start_date', 'end_date', 'status', 'file_url', 'notes',
+      'business_name', 'rep_name', 'rep_position', 'id_number', 'address', 'email', 'phone', 'services', 'duration', 'place', 'signed', 'signed_at'],
     list: `select t.*, c.name client_name from contracts t join clients c on c.id=t.client_id order by t.status='active' desc, t.end_date nulls last, t.id desc`,
   },
 };
@@ -917,6 +918,19 @@ create index if not exists idx_time_client on time_entries(client_id);
 create index if not exists idx_time_start on time_entries(started_at);
 create unique index if not exists one_running_timer on time_entries(user_id) where ended_at is null;
 alter table time_entries enable row level security;
+-- contracts made from the agreement form
+alter table contracts add column if not exists business_name text;
+alter table contracts add column if not exists rep_name text;
+alter table contracts add column if not exists rep_position text;
+alter table contracts add column if not exists id_number text;
+alter table contracts add column if not exists address text;
+alter table contracts add column if not exists email text;
+alter table contracts add column if not exists phone text;
+alter table contracts add column if not exists services text;
+alter table contracts add column if not exists duration text;
+alter table contracts add column if not exists place text;
+alter table contracts add column if not exists signed boolean not null default false;
+alter table contracts add column if not exists signed_at date;
 -- clients who already paid everything off: tick their leftover months
 update retainer_months m set status = 'rec'
 where m.status = 'not_rec' and m.amount = 0
