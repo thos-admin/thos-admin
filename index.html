@@ -235,6 +235,29 @@ body.limited .side .nav:not(.allow), body.limited .side-group, body.limited .sid
 .live{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--good)}
 .live:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--good);animation:pulse 1.4s infinite}
 @keyframes pulse{50%{opacity:.3}}
+.k-sec{margin:6px 0 0;font-size:14px;color:var(--night);border-bottom:1px solid var(--line);padding-bottom:6px}
+.svc-list{border:1px solid var(--line);border-radius:12px;padding:6px 10px 10px}
+.svc-h,.svc-row,.svc-tot{display:grid;grid-template-columns:1fr 120px 130px;gap:8px;align-items:center}
+.svc-h{font-size:12px;color:var(--muted);font-weight:600;padding:6px 4px;border-bottom:1px solid var(--line)}
+.svc-h span:not(:first-child),.svc-tot span:not(:first-child){text-align:right}
+.svc-row{padding:7px 4px;border-bottom:1px solid var(--line)}
+.svc-row .svc-n{display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:14px;margin:0}
+.svc-row .svc-n b{display:block;font-weight:600} .svc-row .svc-n small{color:var(--muted);font-size:12px}
+.svc-row .svc-n input[type=checkbox]{margin-top:3px;width:18px !important;height:18px;flex:0 0 18px;padding:0}
+.svc-row .svc-n{text-align:left;font-weight:400;color:var(--ink)} .svc-row .svc-n span{flex:1;min-width:0}
+.svc-tot span{white-space:nowrap}
+.svc-row .amt{width:100%;text-align:right;padding:7px 8px;border:1px solid var(--line-2);border-radius:8px;font:inherit;background:#fff}
+.svc-row:not(.on) .amt{opacity:.45}
+.svc-row.on{background:#fffbea}
+.svc-row.other .svc-n{align-items:center}
+.svc-row .o-desc{flex:1;padding:7px 9px;border:1px solid var(--line-2);border-radius:8px;font:inherit}
+.o-x{border:0;background:none;font-size:20px;color:var(--muted);cursor:pointer;padding:0 4px}
+.svc-tot{padding:10px 4px 2px;font-weight:700}
+@media (max-width:700px){.svc-h,.svc-row,.svc-tot{grid-template-columns:1fr 84px 84px;gap:6px}.svc-row .svc-n{font-size:13px}}
+.svc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px}
+.svc{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;font-size:14px}
+.svc:has(input:checked){border-color:var(--night);background:#fffbea}
+.svc input{margin-top:3px} .svc b{display:block} .svc small{color:var(--muted);font-size:12px;line-height:1.4}
 .now-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
 .now-chips span{background:var(--good-bg);color:var(--good);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600}
 .side-foot .who{display:block;font-size:12px;color:#8a94a8;margin-bottom:6px}
@@ -613,27 +636,29 @@ const CFG = {
     savedMsg: (r, isNew) => r.ticked && r.ticked.length ? `Payment saved. Marked ${r.ticked.join(', ')} as received` : isNew ? 'Transaction saved' : 'Changes saved',
   },
   contracts: {
-    title: 'Contracts', one: 'contract', ep: 'contracts', sub: 'Retainers and project agreements, with renewal dates.',
-    search: ['client_name','title','notes'], statusKey: 'status', statuses: ['draft','active','completed','cancelled'],
+    title: 'Contracts', one: 'contract', ep: 'contracts', sub: 'Fill in the client details, download the agreement as a PDF and send it. Tick Signed once they sign.',
+    search: ['client_name','business_name','rep_name','title','id_number','notes'], statusKey: 'status', statuses: ['draft','active','completed','cancelled'],
     cols: [
-      { l: 'Client', r: k => `<strong>${esc(k.client_name)}</strong>` },
-      { l: 'Contract', r: k => esc(k.title) + (k.file_url ? ` <a href="${esc(k.file_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:13px">View file</a>` : '') },
-      { l: 'Type', r: k => pill(k.kind) },
-      { l: 'Starts', r: k => dt(k.start_date) },
-      { l: 'Ends', r: k => { const soon = k.status === 'active' && k.end_date && k.end_date <= addDays(todayISO(), 30); return `<span class="${soon ? 'neg' : ''}">${dt(k.end_date)}</span>`; } },
-      { l: 'Status', r: k => pill(k.status) },
-      { l: 'Value', cls: 'money', r: k => money(k.value) + (k.kind === 'retainer' ? '<span class="muted"> /mo</span>' : '') },
+      { l: 'Client', r: k => `<strong>${esc(k.business_name || k.client_name)}</strong><div class="muted" style="font-size:13px">${esc(contractNo(k))}${k.rep_name ? ' · ' + esc(k.rep_name) : ''}</div>` },
+      { l: 'Term', tcls: 'd-only', r: k => `${dt(k.start_date)} to ${dt(k.end_date)}${k.duration ? `<div class="muted" style="font-size:13px">${esc(k.duration)}</div>` : ''}` },
+      { l: 'Ends', tcls: 'd-only', r: k => { const soon = k.signed && k.end_date && k.end_date <= addDays(todayISO(), 45); return `<span class="${soon ? 'neg' : ''}">${dt(k.end_date)}</span>${soon ? '<div class="neg" style="font-size:12px">Renewal due</div>' : ''}`; } },
+      { l: 'Amount', cls: 'money', tcls: 'd-only', r: k => { const t = svcTotals(parseServices(k.services)); return `${t.monthly ? money(t.monthly) + '<span class="muted"> /mo</span>' : ''}${t.once ? `<div class="${t.monthly ? 'muted' : ''}" style="font-size:${t.monthly ? 12 : 14}px">${money(t.once)} once-off</div>` : ''}${!t.monthly && !t.once ? '<span class="muted">–</span>' : ''}`; } },
+      { l: 'Signed', r: k => `<button class="tog ${k.signed ? 'on' : 'off'}" type="button" data-sign="${k.id}" title="Click to change">${k.signed ? 'Signed' : 'Not signed'}</button>${k.signed && k.signed_at ? `<div class="muted" style="font-size:12px;margin-top:3px">${dt(k.signed_at)}</div>` : ''}` },
+      { l: '', r: k => `<button class="btn sm" type="button" data-pdf="${k.id}">PDF</button>` },
     ],
-    fields: [
-      { k: 'client_id', l: 'Client', t: 'client', req: true, full: true },
-      { k: 'title', l: 'Contract name', req: true, full: true, hint: 'For example: Social media retainer, or Shopify store build' },
-      { k: 'kind', l: 'Type', t: 'select', opts: [['retainer','Retainer (monthly)'],['project','Once-off project']], def: 'retainer' },
-      { k: 'value', l: 'Value (R)', t: 'money', req: true, hint: 'Per month for retainers, total for projects' },
-      { k: 'start_date', l: 'Start date', t: 'date', def: todayISO() }, { k: 'end_date', l: 'End date', t: 'date' },
-      { k: 'status', l: 'Status', t: 'select', opts: ['draft','active','completed','cancelled'], def: 'active' },
-      { k: 'file_url', l: 'Link to signed contract', t: 'url', hint: 'Paste a Google Drive or Dropbox link to the PDF' },
-      { k: 'notes', l: 'Notes', t: 'textarea' },
-    ],
+    tableCls: 'bank',
+    add: () => contractForm({}),
+    open: (k) => contractForm(k),
+    afterRender(card, list) {
+      card.querySelectorAll('[data-pdf]').forEach(b => b.onclick = (e) => { e.stopPropagation(); openContractDoc(list.find(k => String(k.id) === b.dataset.pdf)); });
+      card.querySelectorAll('[data-sign]').forEach(b => b.onclick = async (e) => {
+        e.stopPropagation();
+        const k = list.find(x => String(x.id) === b.dataset.sign), on = !k.signed;
+        if (!on && !confirm('Mark this contract as not signed?')) return;
+        try { await A('/contracts/' + k.id, { method: 'PUT', body: { signed: on, signed_at: on ? todayISO() : null, status: on ? 'active' : 'draft' } }); toast(on ? 'Marked as signed' : 'Marked as not signed'); route(); }
+        catch (x) { toast(x.message, true); }
+      });
+    },
   },
   leads: {
     title: 'Leads', one: 'lead', ep: 'leads', sub: 'Every lead, who contacted them and when. Open one to log a call or WhatsApp with proof.',
@@ -876,6 +901,328 @@ async function leadView(id) {
       m.close(); bust(); refreshLeadBadge(); toast('Client created from lead'); location.hash = 'client/' + c.id;
     } catch (e) { toast(e.message, true); }
   };
+}
+
+/* ================= contracts: agreement form + branded PDF ================= */
+// Your price list. once = once-off price, monthly = per-month amount. Both can be changed on each contract.
+const CONTRACT_SERVICES = [
+  { name: 'Web Dev', desc: 'Service Based, Catalogue, Landing Page Website', turn: '24 hours', once: 5000, monthly: 350 },
+  { name: 'Web Dev', desc: 'Ecommerce Website (Shopify, up to 100 products)', turn: '3-5 business days', once: 11500, monthly: 350 },
+  { name: 'Web Dev', desc: 'Service Based, Booking Website with Calendar', turn: '3-5 business days', once: 7500, monthly: 500 },
+  { name: 'Web Dev', desc: 'Service Based, Booking Website with Calendar & Payments', turn: '3-5 business days', once: 10000, monthly: 700 },
+  { name: 'Web Dev', desc: 'Service Based, Full Service Site with Admin Panel', turn: '3-5 business days', once: 15000, monthly: 1000 },
+  { name: 'Web Dev', desc: 'Admin Panel Stand Alone', turn: '3-5 business days', once: 5000, monthly: 500 },
+  { name: 'Social Media', desc: 'Bronze Social Media Package', turn: 'Starts as soon as payment is received', once: 0, monthly: 1500 },
+  { name: 'Social Media', desc: 'Silver Social Media Package', turn: 'Starts as soon as payment is received', once: 0, monthly: 2500 },
+  { name: 'Social Media', desc: 'Business Social Media Package', turn: 'Starts as soon as payment is received', once: 0, monthly: 3500 },
+  { name: 'Social Media', desc: 'Gold Social Media Package', turn: 'Starts as soon as payment is received', once: 0, monthly: 8000 },
+  { name: 'Social Media', desc: 'Diamond Social Media Package', turn: 'Starts as soon as payment is received', once: 0, monthly: 10000 },
+  { name: 'Social Media', desc: 'Platinum Social Media Package', turn: 'Starts as soon as payment is received', once: 0, monthly: 12000 },
+  { name: 'AI Bot', desc: 'Website FAQ Bot', turn: '2-3 business days', once: 5000, monthly: 600 },
+  { name: 'AI Bot', desc: 'WhatsApp Bot', turn: '3-5 business days', once: 6000, monthly: 2000 },
+  { name: 'Software', desc: 'Loyalty Program', turn: '2-3 business days', once: 5000, monthly: 350 },
+  { name: 'Video Editing', desc: 'Studio Package', turn: 'Starts as soon as payment is received', once: 0, monthly: 1000 },
+  { name: 'Video Editing', desc: 'Creative Package', turn: 'Starts as soon as payment is received', once: 0, monthly: 2000 },
+  { name: 'Video Editing', desc: 'Signature Package', turn: 'Starts as soon as payment is received', once: 0, monthly: 3000 },
+  { name: 'Video Editing', desc: "Director's Cut Package", turn: 'Starts as soon as payment is received', once: 0, monthly: 4000 },
+];
+// Saved services: a JSON list of { name, desc, turn, once, monthly }. Older contracts saved plain names, one per line.
+const parseServices = (raw) => {
+  if (!raw) return [];
+  try { const j = JSON.parse(raw); if (Array.isArray(j)) return j; } catch {}
+  return String(raw).split('\n').filter(Boolean).map(n => ({ name: 'Other', desc: n, turn: '', once: 0, monthly: 0 }));
+};
+const svcTotals = (list) => list.reduce((t, x) => ({ once: t.once + num(x.once), monthly: t.monthly + num(x.monthly) }), { once: 0, monthly: 0 });
+const DURATIONS = [['1', '1 month'], ['3', '3 months'], ['6', '6 months'], ['12', '1 year'], ['18', '18 months'], ['24', '2 years'], ['36', '3 years'], ['', 'Choose dates myself']];
+const contractNo = (k) => k.id ? `THOS-${String(k.start_date || k.created_at || todayISO()).slice(0, 4)}-${String(k.id).padStart(4, '0')}` : 'New contract';
+const addMonths = (iso, n) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCMonth(d.getUTCMonth() + n); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
+const BRAND_DEFAULTS = { business_name: 'The House Of Services', reg_no: '2024/697462/07', address: '10A 5th Street, Melville, Johannesburg', email: 'info@thehouseofservices.co.za', signatory: 'Qadeer Ahmed', signatory_position: 'Service Provider' };
+const brand = (s) => Object.fromEntries(Object.entries(BRAND_DEFAULTS).map(([k, v]) => [k, (s && String(s[k] || '').trim()) || v]));
+
+async function contractForm(k) {
+  const isNew = !k.id;
+  const cs = await clients();
+  const client = cs.find(c => String(c.id) === String(k.client_id));
+  const v = { business_name: client ? client.name : '', rep_name: client ? client.contact_person || '' : '', rep_position: 'Owner', email: client ? client.email || '' : '', phone: client ? client.phone || '' : '',
+    address: client ? client.address || '' : '', place: 'Johannesburg', start_date: todayISO(), kind: 'retainer', ...k };
+  const saved = parseServices(v.services);
+  const isCat = (x) => CONTRACT_SERVICES.some(c => c.name === x.name && c.desc === x.desc);
+  const savedFor = (c) => saved.find(x => x.name === c.name && x.desc === c.desc);
+  const others = saved.filter(x => !isCat(x));
+  const durKey = (DURATIONS.find(d => d[1] === v.duration) || [isNew ? '12' : ''])[0];
+  const form = document.createElement('form'); form.className = 'fgrid'; form.noValidate = true;
+  const fld = (id, label, val, opt, type = 'text', ph = '') => `<div class="f"><label for="${id}">${label}${opt ? ' <span style="font-weight:400;color:var(--muted)">(optional)</span>' : ''}</label><input id="${id}" type="${type}" value="${esc(val || '')}" placeholder="${ph}"></div>`;
+  form.innerHTML = `
+    <div class="f full"><h3 class="k-sec">1 · Client</h3></div>
+    <div class="f full"><label for="k_client">Client</label><select id="k_client"><option value="">Choose a client…</option>${cs.map(c => `<option value="${c.id}"${String(c.id) === String(v.client_id) ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select><span class="hint">Not in your list yet? Add them under Clients first.</span></div>
+    ${fld('k_bus', 'Business name (as it should appear on the contract)', v.business_name)}
+    ${fld('k_idn', 'ID or company registration number', v.id_number, false, 'text', 'For example: 8501015800087 or 2019/123456/07')}
+    ${fld('k_rep', 'Name of person signing', v.rep_name)}
+    ${fld('k_pos', 'Their position', v.rep_position, false, 'text', 'Owner, Director…')}
+    <div class="f full"><label for="k_addr">Business address</label><input id="k_addr" value="${esc(v.address || '')}" placeholder="Street, suburb, city"></div>
+    ${fld('k_em', 'Email', v.email, true, 'email')}
+    ${fld('k_ph', 'Phone', v.phone, true, 'tel')}
+    <div class="f full"><h3 class="k-sec">2 · Term</h3></div>
+    <div class="f"><label for="k_dur">Duration</label><select id="k_dur">${DURATIONS.map(([m, l]) => `<option value="${m}"${m === durKey ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div class="f"><label for="k_kind">Type</label><select id="k_kind"><option value="retainer"${v.kind === 'retainer' ? ' selected' : ''}>Retainer (monthly)</option><option value="project"${v.kind === 'project' ? ' selected' : ''}>Once-off project</option></select></div>
+    ${fld('k_from', 'From', v.start_date, false, 'date')}
+    ${fld('k_to', 'To', v.end_date || (durKey ? addMonths(v.start_date, +durKey) : ''), false, 'date')}
+    <div class="f full"><h3 class="k-sec">3 · Services</h3></div>
+    <div class="f full"><p class="muted" style="margin:0 0 8px;font-size:13px">Tick every service they're taking. Prices fill in from your price list. Change any amount, for example to give a discount.</p>
+      <div class="svc-list">
+        <div class="svc-h"><span>Service</span><span>Once-off (R)</span><span>Monthly (R)</span></div>
+        ${CONTRACT_SERVICES.map((c, i) => { const sv = savedFor(c); return `<div class="svc-row${sv ? ' on' : ''}" data-cat="${i}">
+          <label class="svc-n"><input type="checkbox"${sv ? ' checked' : ''}><span><b>${esc(c.desc)}</b><small>${esc(c.name)} · ${esc(c.turn)}</small></span></label>
+          <input class="amt" data-once inputmode="decimal" value="${sv ? num(sv.once) : c.once}" aria-label="Once-off amount">
+          <input class="amt" data-mon inputmode="decimal" value="${sv ? num(sv.monthly) : c.monthly}" aria-label="Monthly amount"></div>`; }).join('')}
+        <div data-others></div>
+        <button type="button" class="btn sm" data-addother style="margin-top:8px">+ Add other service</button>
+        <div class="svc-tot"><span>Total</span><span data-tonce>R 0</span><span data-tmon>R 0 /mo</span></div>
+      </div></div>
+    <div class="f full"><h3 class="k-sec">4 · Signing</h3></div>
+    ${fld('k_place', 'Place of signing', v.place)}
+    <div class="f"><label class="check" style="margin-top:26px"><input type="checkbox" id="k_signed"${v.signed ? ' checked' : ''}> Client has signed</label></div>
+    <div class="f full"><label for="k_notes">Internal notes <span style="font-weight:400;color:var(--muted)">(not on the contract)</span></label><textarea id="k_notes" rows="2">${esc(v.notes || '')}</textarea></div>
+    <p class="form-err full" hidden></p>`;
+  const foot = document.createElement('div'); foot.style.cssText = 'display:contents';
+  foot.innerHTML = `${isNew ? '' : '<button class="btn danger" type="button" data-del>Delete</button>'}<div class="right"><button class="btn" type="button" data-cancel>Cancel</button><button class="btn" type="button" data-savepdf>Save &amp; download PDF</button><button class="btn primary" type="button" data-save>${isNew ? 'Save contract' : 'Save changes'}</button></div>`;
+  const m = modal({ title: isNew ? 'New contract' : 'Contract ' + contractNo(k), body: form, foot, wide: true });
+  const $f = (id) => $('#' + id, form), err = $('.form-err', form);
+  const otherRow = (x = {}) => {
+    const d = document.createElement('div'); d.className = 'svc-row on other';
+    d.innerHTML = `<div class="svc-n"><input class="o-desc" placeholder="What are you billing for? e.g. Custom monthly graphic design" value="${esc(x.desc || '')}"><button type="button" class="o-x" title="Remove" aria-label="Remove">×</button></div>
+      <input class="amt" data-once inputmode="decimal" value="${num(x.once) || ''}" placeholder="0" aria-label="Once-off amount">
+      <input class="amt" data-mon inputmode="decimal" value="${num(x.monthly) || ''}" placeholder="0" aria-label="Monthly amount">`;
+    $('.o-x', d).onclick = () => { d.remove(); totals(); };
+    $('[data-others]', form).appendChild(d); return d;
+  };
+  const amt = (el) => Number(String(el.value).replace(/[^0-9.]/g, '')) || 0;
+  const readServices = () => [
+    ...[...form.querySelectorAll('.svc-row[data-cat]')].filter(r => $('input[type=checkbox]', r).checked).map(r => { const c = CONTRACT_SERVICES[r.dataset.cat]; return { name: c.name, desc: c.desc, turn: c.turn, once: amt($('[data-once]', r)), monthly: amt($('[data-mon]', r)) }; }),
+    ...[...form.querySelectorAll('.svc-row.other')].map(r => ({ name: 'Other', desc: $('.o-desc', r).value.trim(), turn: '', once: amt($('[data-once]', r)), monthly: amt($('[data-mon]', r)) })).filter(x => x.desc),
+  ];
+  const totals = () => { const t = svcTotals(readServices()); $('[data-tonce]', form).textContent = money(t.once); $('[data-tmon]', form).textContent = money(t.monthly) + ' /mo'; };
+  form.querySelectorAll('.svc-row[data-cat]').forEach(r => {
+    const cb = $('input[type=checkbox]', r);
+    cb.onchange = () => { r.classList.toggle('on', cb.checked); totals(); };
+    r.querySelectorAll('.amt').forEach(i => i.addEventListener('focus', () => { if (!cb.checked) { cb.checked = true; r.classList.add('on'); totals(); } }));
+  });
+  others.forEach(otherRow);
+  $('[data-addother]', form).onclick = () => { $('.o-desc', otherRow()).focus(); };
+  form.addEventListener('input', (e) => { if (e.target.matches('.amt, .o-desc')) totals(); });
+  totals();
+  $f('k_client').onchange = () => {
+    const c = cs.find(x => String(x.id) === $f('k_client').value); if (!c) return;
+    $f('k_bus').value = c.name; if (c.contact_person) $f('k_rep').value = c.contact_person;
+    if (c.email) $f('k_em').value = c.email; if (c.phone) $f('k_ph').value = c.phone; if (c.address) $f('k_addr').value = c.address;
+  };
+  const recalc = () => { const mth = $f('k_dur').value; if (mth && $f('k_from').value) $f('k_to').value = addMonths($f('k_from').value, +mth); };
+  $f('k_dur').onchange = recalc; $f('k_from').onchange = recalc;
+  $('[data-cancel]', m.el).onclick = m.close;
+  const collect = () => {
+    const services = readServices(), tot = svcTotals(services);
+    const dur = $f('k_dur').value;
+    const months = dur ? +dur : Math.max(1, Math.round((new Date($f('k_to').value) - new Date($f('k_from').value)) / (30.44 * 864e5)));
+    const durLabel = dur ? DURATIONS.find(d => d[0] === dur)[1] : (months % 12 === 0 ? `${months / 12} year${months > 12 ? 's' : ''}` : `${months} months`);
+    const signed = $f('k_signed').checked;
+    return { client_id: $f('k_client').value, business_name: $f('k_bus').value.trim(), id_number: $f('k_idn').value.trim(), rep_name: $f('k_rep').value.trim(), rep_position: $f('k_pos').value.trim(),
+      address: $f('k_addr').value.trim(), email: $f('k_em').value.trim(), phone: $f('k_ph').value.trim(), start_date: $f('k_from').value, end_date: $f('k_to').value, kind: $f('k_kind').value,
+      duration: durLabel, services: services.length ? JSON.stringify(services) : '', place: $f('k_place').value.trim(), notes: $f('k_notes').value, signed, signed_at: signed ? (k.signed_at || todayISO()) : null,
+      status: signed ? (k.status && k.status !== 'draft' ? k.status : 'active') : 'draft', title: 'Services Trade Agreement', value: tot.monthly || tot.once };
+  };
+  const save = async (thenPdf) => {
+    const d = collect();
+    const miss = [[!d.client_id, 'Choose the client.'], [!d.business_name, 'Add the business name.'], [!d.rep_name, 'Add the name of the person signing.'], [!d.start_date || !d.end_date, 'Add the from and to dates.'],
+      [d.end_date && d.start_date && d.end_date <= d.start_date, 'The end date must be after the start date.'], [!d.services, 'Tick at least one service, or add an other service.']].find(x => x[0]);
+    if (miss) { err.hidden = false; err.textContent = miss[1]; return; }
+    const win = thenPdf ? window.open('', '_blank') : null;   // open now so the browser allows it
+    try {
+      const saved = await A('/contracts' + (isNew ? '' : '/' + k.id), { method: isNew ? 'POST' : 'PUT', body: d });
+      m.close(); bust(); toast(isNew ? 'Contract saved' : 'Changes saved'); route();
+      if (thenPdf) openContractDoc({ ...saved, client_name: d.business_name }, win);
+    } catch (x) { if (win) win.close(); err.hidden = false; err.textContent = x.message; }
+  };
+  $('[data-save]', m.el).onclick = () => save(false);
+  $('[data-savepdf]', m.el).onclick = () => save(true);
+  const del = $('[data-del]', m.el);
+  if (del) del.onclick = async () => { if (!confirm('Delete this contract? This can’t be undone.')) return; try { await A('/contracts/' + k.id, { method: 'DELETE' }); m.close(); toast('Contract deleted'); route(); } catch (x) { toast(x.message, true); } };
+}
+
+async function openContractDoc(k, win) {
+  win = win || window.open('', '_blank');
+  if (!win) return toast('Allow pop-ups for this site to download the contract.', true);
+  let s = {}; try { s = await A('/settings'); } catch {}
+  win.document.open(); win.document.write(contractDocHTML(k, brand(s))); win.document.close();
+}
+
+function contractDocHTML(k, B) {
+  const e = esc, C = e(k.business_name || k.client_name || ''), no = contractNo(k);
+  const longDate = (iso) => { if (!iso) return '____________'; const [y, m, d] = iso.slice(0, 10).split('-'); return `${+d} ${['January','February','March','April','May','June','July','August','September','October','November','December'][m - 1]} ${y}`; };
+  const svc = parseServices(k.services), T = svcTotals(svc);
+  const R$ = (n) => num(n) ? money(n) : '–';
+  const line = (v) => v ? e(v) : '<span class="blank"></span>';
+  const clause = (n, t, body) => `<section class="cl"><h3><span>${n}</span>${t}</h3>${body}</section>`;
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>${no} · Services Trade Agreement · ${C}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--n:#0b1320;--n2:#16233a;--y:#FFC629;--ink:#1d2433;--mut:#5e6a80;--line:#dfe4ec}
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+html{background:#e9edf3}
+body{margin:0;font:10.5pt/1.55 Inter,system-ui,sans-serif;color:var(--ink)}
+.bar{position:sticky;top:0;z-index:5;background:var(--n);color:#fff;display:flex;gap:10px;align-items:center;justify-content:space-between;padding:12px 18px;font:600 14px Inter,sans-serif}
+.bar button{background:var(--y);color:var(--n);border:0;border-radius:10px;padding:10px 18px;font:700 14px Inter,sans-serif;cursor:pointer}
+.bar small{color:#9fb0c8;font-weight:500}
+.page{width:210mm;margin:18px auto;background:#fff;box-shadow:0 10px 30px -12px rgba(11,19,32,.35);position:relative;overflow:hidden}
+.cover{background:var(--n);color:#fff;min-height:297mm;padding:22mm 20mm;display:flex;flex-direction:column;position:relative}
+.cover:before{content:"";position:absolute;right:-60mm;top:-60mm;width:170mm;height:170mm;border-radius:50%;background:radial-gradient(circle,rgba(255,198,41,.22),rgba(255,198,41,0) 65%)}
+.cover:after{content:"";position:absolute;left:0;bottom:0;height:8mm;width:100%;background:var(--y)}
+.logo{display:flex;align-items:center;gap:12px;font:800 13pt Montserrat,sans-serif;letter-spacing:.04em}
+.logo img{height:46px}
+.logo .mark{width:42px;height:42px}
+.kicker{margin-top:38mm;color:var(--y);font:700 10pt Montserrat,sans-serif;letter-spacing:.22em;text-transform:uppercase}
+h1{font:900 30pt/1.05 Montserrat,sans-serif;margin:6mm 0 0;letter-spacing:-.01em}
+h1 em{font-style:normal;color:var(--y)}
+.parties{display:grid;grid-template-columns:1fr auto 1fr;gap:6mm;align-items:stretch;margin-top:16mm;position:relative;z-index:1}
+.party{background:var(--n2);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:6mm}
+.party .lbl{color:var(--y);font:700 8pt Montserrat,sans-serif;letter-spacing:.16em;text-transform:uppercase}
+.party .nm{font:800 14pt/1.2 Montserrat,sans-serif;margin:2.5mm 0 1.5mm}
+.party .sub{color:#b9c4d6;font-size:9.5pt}
+.and{align-self:center;font:800 11pt Montserrat,sans-serif;color:var(--y)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(40mm,1fr));gap:4mm;margin-top:10mm;position:relative;z-index:1}
+.fact{border-top:2px solid var(--y);padding-top:3mm}
+.fact .lbl{color:#9fb0c8;font-size:8pt;text-transform:uppercase;letter-spacing:.12em;font-weight:600}
+.fact .v{font:700 11.5pt Montserrat,sans-serif;margin-top:1mm}
+.cover .foot{margin-top:auto;color:#9fb0c8;font-size:8.5pt;padding-bottom:6mm;position:relative;z-index:1}
+.inner{padding:18mm 18mm 22mm} .keep{break-inside:avoid}
+.hd{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--n);padding-bottom:3mm;margin-bottom:7mm;font:700 8.5pt Montserrat,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--n)}
+.hd span:last-child{color:var(--mut);font-weight:600}
+h2{font:800 15pt Montserrat,sans-serif;color:var(--n);margin:0 0 4mm}
+h2:after{content:"";display:block;width:16mm;height:3px;background:var(--y);margin-top:2.5mm}
+.cl{margin:0 0 5.5mm;break-inside:auto}
+.cl h3{font:800 10.5pt Montserrat,sans-serif;color:var(--n);margin:0 0 2mm;display:flex;gap:3mm;align-items:center;text-transform:uppercase;letter-spacing:.03em;break-after:avoid}
+.cl h3 span{background:var(--y);color:var(--n);min-width:7mm;height:7mm;border-radius:2mm;display:inline-flex;align-items:center;justify-content:center;font-size:9.5pt}
+p{margin:0 0 2.2mm}
+.box{background:#f5f7fb;border:1px solid var(--line);border-left:4px solid var(--y);border-radius:3mm;padding:4mm 5mm;margin:3mm 0 4mm}
+.kv{display:grid;grid-template-columns:44mm 1fr;gap:1.6mm 4mm;font-size:10pt}
+.kv b{color:var(--mut);font-weight:600}
+.fees{width:100%;border-collapse:collapse;margin:3mm 0 2mm;font-size:9.5pt}
+.fees th{background:var(--n);color:#fff;text-align:left;padding:2.6mm 3mm;font:700 8pt Montserrat,sans-serif;letter-spacing:.06em;text-transform:uppercase}
+.fees th:first-child{border-radius:2mm 0 0 0}.fees th:last-child{border-radius:0 2mm 0 0}
+.fees td{padding:2.6mm 3mm;border-bottom:1px solid var(--line);vertical-align:top}
+.fees td b{display:block;color:var(--n)} .fees td small{color:var(--mut);font-size:8.3pt}
+.fees .r{text-align:right;white-space:nowrap}
+.fees tr{break-inside:avoid}
+.fees tfoot td{background:#fff7da;font:800 10pt Montserrat,sans-serif;color:var(--n);border-bottom:3px solid var(--y)}
+.fees tfoot span{font:600 8pt Inter,sans-serif;color:var(--mut)}
+.note{font-size:8.8pt;color:var(--mut)}
+.svcs{display:grid;grid-template-columns:1fr 1fr;gap:3mm;margin:3mm 0 2mm}
+.svcs div{border:1px solid var(--line);border-radius:3mm;padding:3mm 4mm;break-inside:avoid}
+.svcs b{display:block;color:var(--n);font:700 9.5pt Montserrat,sans-serif}
+.svcs small{color:var(--mut);font-size:8.8pt;line-height:1.45;display:block;margin-top:.8mm}
+ol.ob{margin:0;padding-left:5mm} ol.ob li{margin-bottom:2.2mm} ol.ob li b{color:var(--n)}
+.blank{display:inline-block;min-width:40mm;border-bottom:1px solid var(--ink);height:1em;vertical-align:baseline}
+.sign{display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin-top:6mm;break-inside:avoid}
+.sigc{border:1px solid var(--line);border-radius:4mm;overflow:hidden}
+.sigc .top{background:var(--n);color:#fff;padding:3mm 5mm;min-height:13mm;display:flex;align-items:center;gap:1.5mm;flex-wrap:wrap;font:700 9pt Montserrat,sans-serif;letter-spacing:.1em;text-transform:uppercase}
+.sigc .top span{color:var(--y)}
+.sigc .body{padding:5mm}
+.sl{margin-bottom:5mm} .sl label{display:block;font-size:8pt;color:var(--mut);text-transform:uppercase;letter-spacing:.1em;font-weight:600}
+.sl div{border-bottom:1px solid #9aa6b8;min-height:8mm;padding:1.5mm 0 1mm;font-weight:600}
+.sl.sig div{min-height:18mm}
+.pfoot{position:absolute;left:18mm;right:18mm;bottom:9mm;display:flex;justify-content:space-between;font-size:8pt;color:var(--mut);border-top:1px solid var(--line);padding-top:2.5mm}
+.pfoot .ini span{display:inline-block;width:14mm;border-bottom:1px solid var(--mut);margin-left:2mm}
+@page{size:A4;margin:16mm 0 18mm} @page cover{margin:0} .coverp{page:cover}
+@media print{html{background:#fff}.bar{display:none}.page{margin:0;box-shadow:none}.coverp{break-after:page;height:297mm}.cover{height:297mm}.flow .inner{padding:0 18mm}}
+@media screen and (max-width:820px){.page{zoom:.46}}
+</style></head><body>
+<div class="bar"><div>${no} · ${C}<br><small>Press the button, then choose “Save as PDF”.</small></div><button onclick="window.print()">Download PDF</button></div>
+
+<div class="page coverp"><div class="cover">
+  <div class="logo"><svg class="mark" viewBox="0 0 64 64"><path d="M8 30 32 9l24 21v25H8z" fill="none" stroke="#FFC629" stroke-width="5" stroke-linejoin="round"/><rect x="26" y="34" width="12" height="12" fill="#FFC629"/></svg>THE HOUSE OF SERVICES</div>
+  <div class="kicker">Agreement ${no}</div>
+  <h1>Business to Business<br>Services Trade <em>Agreement</em></h1>
+  <div class="parties">
+    <div class="party"><div class="lbl">Customer</div><div class="nm">${C}</div><div class="sub">${k.id_number ? 'ID / Reg No: ' + e(k.id_number) : ''}${k.address ? '<br>' + e(k.address) : ''}</div></div>
+    <div class="and">&amp;</div>
+    <div class="party"><div class="lbl">Service provider</div><div class="nm">${e(B.business_name)}</div><div class="sub">Reg No: ${e(B.reg_no)}<br>${e(B.address)}</div></div>
+  </div>
+  <div class="facts">
+    <div class="fact"><div class="lbl">Commencement</div><div class="v">${longDate(k.start_date)}</div></div>
+    <div class="fact"><div class="lbl">Completion</div><div class="v">${longDate(k.end_date)}</div></div>
+    <div class="fact"><div class="lbl">Duration</div><div class="v">${e(k.duration || '')}</div></div>
+    ${T.monthly ? `<div class="fact"><div class="lbl">Monthly</div><div class="v">${R$(T.monthly)}</div></div>` : ''}
+    ${T.once ? `<div class="fact"><div class="lbl">Once-off</div><div class="v">${R$(T.once)}</div></div>` : ''}
+  </div>
+  <div class="foot">Entered into by and between ${C} (hereinafter referred to as the “Customer”) and ${e(B.business_name)} (hereinafter referred to as the “Service Provider”). Confidential.</div>
+</div></div>
+
+<div class="page flow"><div class="inner">
+  <div class="hd"><span>Services Trade Agreement</span><span>${no}</span></div>
+  <h2>The parties</h2>
+  <p>This Service Trade Agreement is made pursuant to the terms of the agreement between:</p>
+  <div class="box"><div class="kv">
+    <b>Service Provider</b><span>${e(B.business_name)} (Reg No: ${e(B.reg_no)}), in accordance with the laws of South Africa, located at ${e(B.address)}</span>
+    <b>Customer</b><span>${C}${k.id_number ? ` (ID / Reg No: ${e(k.id_number)})` : ''}, in accordance with the laws of South Africa, whose principal place of business is ${line(k.address)}</span>
+    <b>Represented by</b><span>${line(k.rep_name)}${k.rep_position ? ', ' + e(k.rep_position) : ''}</span>
+  </div></div>
+  <p>The parties wish to enter into a Business to Business agreement for the services listed below. NOW THEREFORE IT IS HEREBY AGREED as follows:</p>
+  ${clause('A', 'General', `<p>This Service Trade Agreement is in accordance with only the terms listed below between both parties.</p><p>${C} hereby appoints the Service Provider to provide the Services set out in this Service Trade Agreement to ${C}.</p><p>In this Service Trade Agreement, unless the context otherwise requires, terms used but not defined in this Service Trade Agreement shall have the meanings given to them in the Agreement.</p>`)}
+  ${clause('B', 'Term of agreement', `<p>The Services, in respect of this Service Trade Agreement, will commence on the Services Commencement Date and will terminate on the Services Completion Date as set out below. ${e(B.business_name)} will be given 1st option of renewal at the end of the term.</p>
+    <div class="box"><div class="kv"><b>Commencement Date</b><span>${longDate(k.start_date)}, notwithstanding the date of signature hereof</span><b>Completion Date</b><span>${longDate(k.end_date)}, with option of Agreed Extension prior to completion date by both parties</span></div></div>`)}
+  ${clause('C', 'Scope of services and fees', `<p>The Service Provider, ${e(B.business_name).toUpperCase()} (PTY) LTD, agrees to deliver the following professional services to support the operational, marketing, and digital needs of the Customer, at the fees set out below:</p>
+    <table class="fees"><thead><tr><th>#</th><th>Service</th><th>Turnaround</th><th class="r">Once-off</th><th class="r">Monthly</th></tr></thead>
+    <tbody>${svc.map((x, i) => `<tr><td>${i + 1}</td><td><b>${e(x.desc)}</b><small>${e(x.name)}</small></td><td>${e(x.turn || '–')}</td><td class="r">${R$(x.once)}</td><td class="r">${R$(x.monthly)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td></td><td colspan="2">Total</td><td class="r">${R$(T.once)}</td><td class="r">${T.monthly ? R$(T.monthly) + ' <span>/ month</span>' : '–'}</td></tr></tfoot></table>
+    <p class="note">All amounts are in South African Rand. Once-off amounts are payable as invoiced. Monthly amounts are invoiced each month for the duration of this agreement.</p>`)}
+
+  ${clause('D', 'Customer obligations', `<ol class="ob">
+    <li><b>Payment Processing.</b> ${C} shall ensure the timely and accurate processing of all payments due to the Service Provider as outlined in the agreed-upon invoicing schedule. Payment delays beyond the agreed terms will incur late charges of R50 per bounced debit order. Continued failure to make payment may result in a suspension of services until all outstanding amounts are settled.</li>
+    <li><b>Good Faith Cooperation.</b> ${C} agrees to act in good faith and maintain open, timely, and transparent communication with the Service Provider. Any deliberate withholding of information, unreasonable delays, or other obstructive behaviour shall constitute a material breach of this agreement.</li>
+    <li><b>Design Approval and Post-Production Responsibility.</b> ${C} shall be responsible for reviewing and approving all design work, content, layouts, and materials provided by the Service Provider prior to any printing, publishing, or public release. Once written or digital approval is received from ${C}, any errors, omissions, or dissatisfaction discovered post-production shall be the sole responsibility of ${C}. The Service Provider will not be held liable for costs or rework unless due to proven negligence.</li>
+    <li><b>Exclusivity of Service.</b> ${C} agrees that the Service Provider shall be the sole and exclusive provider of the agreed-upon services for the duration of this agreement. ${C} shall not engage or contract with any third party to provide similar services that fall within the scope of this agreement without the prior written consent of the Service Provider. Breach of this exclusivity clause shall entitle the Service Provider to terminate this agreement immediately and seek appropriate remedies.</li>
+    <li><b>Mutual Benefit and Shared Intent.</b> Both parties agree to act in a spirit of mutual benefit and shared growth. ${C} and the Service Provider acknowledge that the success of this partnership depends on collaborative effort, transparency, and aligned objectives. Each party agrees to support initiatives, provide timely input, and foster conditions that benefit both businesses.</li></ol>`)}
+  ${clause('E', 'Commercial terms', `${T.once || T.monthly ? `<div class="box"><div class="kv">${T.once ? `<b>Once-off fees</b><span>${R$(T.once)}</span>` : ''}${T.monthly ? `<b>Monthly fees</b><span>${R$(T.monthly)} per month, from ${longDate(k.start_date)} to ${longDate(k.end_date)}</span>` : ''}</div></div>` : ''}<p><b>Payment Terms.</b> ${C} shall settle all invoices issued by the Service Provider within five (5) to seven (7) business days from the invoice date. Timely payment is essential to the continuation of services. Failure to pay within this period will result in a late charge of R50 per overdue invoice, and services may be suspended until full payment is received.</p>`)}
+  ${clause('1', 'Duration and termination', `<p>This Agreement shall commence on the Commencement Date and shall continue for <b>${e(k.duration || '')}</b>, subject to the applicable points above.</p><p>Notwithstanding the foregoing, either Party may terminate this agreement by 60 (sixty) days’ written notice of termination, given by the Party wishing to terminate this agreement to the other.</p>`)}
+  ${clause('2', 'General trading terms and conditions', `<p>It is agreed that the trading terms shall be as set out in the respective cost estimates provided by the Service Provider and accepted by ${C}. All amounts are payable upon receipt of invoice, unless otherwise agreed in writing.</p>`)}
+  ${clause('3', 'Domicilium', `<p>The Parties choose their domicile citandi et executandi (“domicilium”) for the purposes of the giving of any notice, the serving of any process, the payment of any monies and for any other purpose arising from this Agreement, as follows:</p>
+    <div class="box"><div class="kv"><b>${C}</b><span>${line(k.address)}<br>Email: ${line(k.email)}</span><b>${e(B.business_name)}</b><span>${e(B.address)}<br>Email: ${e(B.email)}</span></div></div>
+    <p>Each of the Parties shall be entitled from time to time, on at least 5 (five) days’ written notice to the other Parties, to vary its domicilium to any other physical address in the Republic of South Africa, and/or to vary its chosen facsimile number to any other facsimile number in the Republic of South Africa, and/or to vary the name and/or designation of the person for whose attention such notice, process or the like must be marked.</p>
+    <p>All notices to be given in terms of this Agreement will be given in writing, in the English language. Any written notice given by any Party to another Party (the “Addressee”) which: is delivered by hand during the normal business hours of the Addressee at the Addressee’s domicilium for the time being shall be presumed, unless and until the contrary is proved by the Addressee, to have been received by the Addressee at the time of delivery; is posted by prepaid registered post to the Addressee at the Addressee’s domicilium for the time being shall be presumed, unless and until the contrary is proved by the Addressee, to have been received by the Addressee on the 5th (fifth) day after the date of posting; and is sent by facsimile during the normal business hours of the Addressee, shall be presumed, unless and until the contrary is proved by the Addressee, to have been received by the Addressee on the date of successful transmission of such facsimile. Any facsimile sent outside of such normal business hours will be presumed to have been received on the following day.</p>`)}
+
+  ${clause('4', 'Settlement of disputes', `<p>If any dispute arises out of or relating to this Agreement, or related thereto, whether directly or indirectly, the Parties may refer the dispute for resolution firstly by way of negotiation and in the event of that failing, by way of mediation and in the event of that failing, by way of arbitration. The reference to negotiation and mediation is a precondition to the Parties having the dispute resolved by arbitration, but not if a party opts to resolve the dispute by way of litigation.</p>
+    <p>A dispute within the meaning of this clause exists once one Party notifies the other in writing of the nature of the dispute and requires the resolution of the dispute in terms of this clause.</p>
+    <p>Within 10 (ten) business days following such notification, the Parties shall seek an amicable resolution to such dispute by referring such dispute to designated representatives of each of the Parties for their negotiation and resolution of the dispute. The representatives shall be authorised to resolve such dispute.</p>
+    <p>In the event of the negotiation between the designated representatives not resulting in an agreement signed by the Parties resolving the dispute within 15 (fifteen) business days thereafter, the Parties must refer the dispute for resolution by way of mediation by a mediator to be appointed by them and failing agreement to be appointed by the Arbitration Foundation of Southern Africa (“AFSA”). In the absence of agreement to the contrary the mediation shall be non-binding on the Parties.</p>
+    <p>In the event of the mediation envisaged in the preceding clause failing in terms of the rules of AFSA, the matter must, within 15 (fifteen) business days thereafter, be referred to arbitration as envisaged in the clauses below. The periods for negotiation or mediation may be shortened or lengthened by written agreement between the Parties.</p>
+    <p>Each Party agrees that the arbitration will be held as an expedited arbitration in Johannesburg in accordance with the then current rules for expedited arbitration of AFSA by 1 (one) arbitrator appointed by agreement between the Parties, including any appeal against the arbitrator’s decision. If the Parties cannot agree on the arbitrator or appeal arbitrators within a period of 15 (fifteen) business days after the referral of the dispute to arbitration, the arbitrator and appeal arbitrators shall be appointed by the Secretariat of AFSA.</p>
+    <p>The provisions of this clause shall not preclude any Party from exercising its common law rights to approach any appropriate and competent court of law for relief at any time. The references to AFSA shall include its successor or body nominated in writing by it in its stead. This clause is a separate, divisible agreement from the rest of this Agreement and shall remain in effect even if the Agreement terminates, is nullified or cancelled for whatsoever reason or cause.</p>`)}
+  ${clause('5', 'Breach', `<p>Notwithstanding the Termination Clause, should either Party breach any of the provisions of this Agreement and the breach is material or the defaulting Party fails to remedy that breach within 10 (ten) business days after receipt of a written notice from the non-defaulting Party, requiring it to remedy that breach, the non-defaulting Party will be entitled, without prejudice to any remedies which it may otherwise have in terms of this Agreement or at law, to immediately terminate this Agreement on the occurrence of the material breach or on the expiry of the 10 (ten) business day period as the case may be.</p>
+    <p>Either Party will be entitled to terminate this Agreement by written notice to the other if the other Party commits an act of insolvency, or initiates business rescue proceedings, or is placed under a provisional or final winding up, or if the other Party reaches a compromise with the creditors, or fails to satisfy or take steps to have set aside any judgment taken against it within 10 (ten) business days after such judgment has come to its notice.</p>
+    <p>The termination of this Agreement, for whatever reason, will not affect the rights of a Party which may have accrued as at the date of termination and will further not affect any rights which specifically or by their nature survive the termination of this Agreement.</p>`)}
+  ${clause('6', 'Force majeure', `<p>Neither Party will be liable to the other for any failure to fulfil its obligations under this Agreement if and to the extent such failure is caused by any circumstances beyond its control, including but not limited to failure of electrical or telecommunications lines, flood, fire, earthquake, war, tempest, hurricane, industrial action, government restrictions or acts of God, provided that a Party affected by such circumstances will notify the other Party thereof as soon as is reasonably possible and will endeavour to resolve such circumstance with all reasonable speed and efforts.</p>
+    <p>Should a Party be unable to fulfil its obligations under this Agreement for a period of more than 20 (twenty) business days due to circumstances beyond its control, as contemplated in this clause, the other Party will be entitled, within a period of 7 (seven) days thereafter, to cancel this Agreement forthwith by written notice to the other Party, without affecting any of its rights and accordingly without prejudice thereto.</p>`)}
+
+  ${clause('7', 'General', `<p>This document constitutes the sole record of the agreement between the Parties in relation to its subject matter. The contents of this agreement are strictly confidential and not to be disclosed to any other party or parties.</p>
+    <p>Neither Party shall be entitled to cede, assign, delegate, or otherwise transfer the benefit or burden of all or any part of this Agreement without the prior written consent of the other Party, which consent shall not be unreasonably withheld or delayed save that the onus of proving that such consent is being unreasonably withheld shall rest on the Party alleging the same.</p>
+    <p>No addition to, variation, novation or agreed cancellation of this Agreement shall be of any force or effect unless in writing and signed by or on behalf of the Parties. No suspension of a right to enforce any term of this Agreement and no pactum de non petendo shall be of any force or effect unless in writing and duly signed by or on behalf of the Parties. No indulgence, which a Party may grant to another party, shall constitute a waiver of any of the rights of the grantor unless in writing signed by both Parties.</p>
+    <p>All provisions in this Agreement are, notwithstanding the way they have been put together or linked grammatically, severable from each other. Any provision of this Agreement which is or becomes unenforceable in any jurisdiction, whether due to invalidity, illegality, unlawfulness or for any other reason whatsoever, shall, in such jurisdiction only and only to the extent that it is so unenforceable, be treated as pro non scripto and the remaining provisions of this Agreement shall continue to be of full force and effect. The Parties declare that it is their intention that this Agreement would be executed without such unenforceable provisions if they were aware of such unenforceability at the time of its execution.</p>`)}
+  <div class="keep"><h2 style="margin-top:8mm">Signatures</h2>
+  <p>The above terms and conditions are accepted at <b>${line(k.place)}</b> on the date of the last signature below.</p>
+  <div class="sign">
+    <div class="sigc"><div class="top"><span>Customer</span> · ${C}</div><div class="body">
+      <div class="sl"><label>Name of representative</label><div>${e(k.rep_name || '')}</div></div>
+      <div class="sl"><label>Position held</label><div>${e(k.rep_position || '')}</div></div>
+      <div class="sl sig"><label>Signature</label><div></div></div>
+      <div class="sl"><label>Date</label><div></div></div></div></div>
+    <div class="sigc"><div class="top"><span>Service provider</span> · ${e(B.business_name)}</div><div class="body">
+      <div class="sl"><label>Name of representative</label><div>${e(B.signatory)}</div></div>
+      <div class="sl"><label>Position held</label><div>${e(B.signatory_position)}</div></div>
+      <div class="sl sig"><label>Signature</label><div></div></div>
+      <div class="sl"><label>Date</label><div></div></div></div></div>
+  </div></div>
+</div></div>
+</body></html>`;
 }
 
 /* ================= time tracking ================= */
@@ -1325,10 +1672,10 @@ async function clientView(id) {
   $('[data-pay]', main).onclick = () => payFor(c.id, 0);
   $('[data-owe]', main).onclick = () => editRecord(CFG.transactions, {}, { type: 'charge', client_id: c.id });
   $('[data-bal]', main).onclick = () => editBalance({ id: c.id, name: c.name, balance: c.balance }, () => clientView(id));
-  $('[data-addk]', main).onclick = () => editRecord(CFG.contracts, {}, { client_id: c.id });
+  $('[data-addk]', main).onclick = () => contractForm({ client_id: c.id });
   const tg = $('[data-toggle]', main); if (tg) tg.onclick = () => toggleRetainer(c.id);
   main.querySelectorAll('[data-t]').forEach(tr => tr.onclick = () => editRecord(CFG.transactions, d.transactions.find(t => String(t.id) === tr.dataset.t)));
-  main.querySelectorAll('[data-k]').forEach(tr => tr.onclick = () => editRecord(CFG.contracts, d.contracts.find(k => String(k.id) === tr.dataset.k)));
+  main.querySelectorAll('[data-k]').forEach(tr => tr.onclick = () => contractForm(d.contracts.find(k => String(k.id) === tr.dataset.k)));
   const strip = $('#strip', main);
   if (strip) wireCells(strip, (b) => { const row = b.parentElement; const y = row.querySelector('.yl').textContent; const i = [...row.children].indexOf(b) - 1; return `${MONTHS[i]} ${y}`; }, () => clientView(id));
 }
@@ -1411,7 +1758,10 @@ async function settingsView() {
   const s = await A('/settings');
   const fields = [
     { k: 'business_name', l: 'Business name', full: true }, { k: 'phone', l: 'Phone' }, { k: 'email', l: 'Email', t: 'email' },
-    { k: 'address', l: 'Address', t: 'textarea' },
+    { k: 'address', l: 'Address', t: 'textarea', hint: 'Shown on contracts' },
+    { k: 'reg_no', l: 'Company registration number', hint: 'Shown on contracts' },
+    { k: 'signatory', l: 'Who signs contracts for you', hint: 'Name on the signature page' },
+    { k: 'signatory_position', l: 'Their position' },
     { k: 'bank_details', l: 'Banking details', t: 'textarea', hint: 'For statements and payment reminders' },
   ];
   $('#main').innerHTML = `<div class="page-head"><div><h1>Settings</h1><p class="sub">Your business details.</p></div></div>
