@@ -1251,7 +1251,7 @@ async function timeStaffView() {
   const [cl, mine] = await Promise.all([A('/time/clients'), A('/time')]);
   const run = mine.find(e => !e.ended_at);
   const sum = (f) => mine.filter(f).reduce((a, e) => a + hoursOf(e), 0);
-  const opts = (sel) => cl.map(c => `<option value="${c.id}"${String(c.id) === String(sel) ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
+  const opts = (sel) => `<option value="internal"${String(sel) === 'internal' ? ' selected' : ''}>★ The House of Services (internal work)</option>` + cl.map(c => `<option value="${c.id}"${String(c.id) === String(sel) ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
   $('.empty', main).outerHTML = `
     <div class="card clock">
       ${run ? `<div class="live">Clocked in</div>
@@ -1263,7 +1263,7 @@ async function timeStaffView() {
         <div class="row"><div><label class="muted" for="t_sw" style="font-size:13px">Moving to another client?</label><select id="t_sw"><option value="">Choose client…</option>${opts()}</select></div>
           <button class="btn" type="button" data-switch>Switch</button></div>`
       : `<div class="muted" style="font-size:14px;font-weight:600">Not clocked in</div>
-        <div class="row"><div><label class="muted" for="t_c" style="font-size:13px">Which client are you working on?</label><select id="t_c"><option value="">Choose client…</option>${opts()}</select></div>
+        <div class="row"><div><label class="muted" for="t_c" style="font-size:13px">Which client are you working on? <span style="font-weight:400">(or The House of Services for internal work)</span></label><select id="t_c"><option value="">Choose client…</option>${opts()}</select></div>
           <div><label class="muted" for="t_n" style="font-size:13px">Task <span style="font-weight:400">(optional)</span></label><input id="t_n" placeholder="For example: Logo design"></div>
           <button class="btn go" type="button" data-in>Clock in</button></div>`}
     </div>
@@ -1355,7 +1355,7 @@ function editTime(e, staff, cl) {
   const people = staff.some(u => String(u.id) === String(e.user_id)) || isNew ? staff : [...staff, { id: e.user_id, name: e.user_name }];
   form.innerHTML = `
     <div class="f"><label for="te_u">Employee</label><select id="te_u" name="user_id"><option value="">Choose…</option>${people.map(u => `<option value="${u.id}" ${String(u.id) === String(e.user_id) ? ' selected' : ''}>${esc(u.name)}</option>`).join('')}</select></div>
-    <div class="f"><label for="te_c">Client</label><select id="te_c" name="client_id"><option value="">Choose…</option>${cl.map(c => `<option value="${c.id}"${String(c.id) === String(e.client_id) ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
+    <div class="f"><label for="te_c">Client</label><select id="te_c" name="client_id"><option value="">Choose…</option><option value="internal"${!isNew && e.client_id == null ? ' selected' : ''}>★ The House of Services (internal work)</option>${cl.map(c => `<option value="${c.id}"${String(c.id) === String(e.client_id) ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
     <div class="f"><label for="te_s">Started</label><input id="te_s" type="datetime-local" value="${localInput(e.started_at)}"></div>
     <div class="f"><label for="te_e">Finished <span style="font-weight:400;color:var(--muted)">(empty = still clocked in)</span></label><input id="te_e" type="datetime-local" value="${localInput(e.ended_at)}"></div>
     <div class="f full"><label for="te_n">Note <span style="font-weight:400;color:var(--muted)">(optional)</span></label><input id="te_n" value="${esc(e.note || '')}"></div>
