@@ -339,9 +339,11 @@ app.get('/api/admin/lead-stats', wrap(async (req, res) => {
 
 // ---------- time tracking: employees clock in / out per client ----------
 // Hours are worked out from the start and end times. Cost = hours x the rate saved on the entry.
-const TIME_SELECT = `select t.*, c.name as client_name,
+// client_id empty = internal work for The House of Services itself
+const TIME_SELECT = `select t.*, coalesce(c.name, 'The House of Services') as client_name,
     round((extract(epoch from (coalesce(t.ended_at, now()) - t.started_at)) / 3600.0)::numeric, 2) as hours
-  from time_entries t join clients c on c.id = t.client_id`;
+  from time_entries t left join clients c on c.id = t.client_id`;
+const timeClient = (v) => (v === 'internal' ? null : v);
 
 app.get('/api/admin/time/clients', wrap(async (req, res) => {
   res.json((await q(`select id, name, billing, retainer_active from clients order by (billing='retainer' and retainer_active) desc, lower(name)`)).rows);
@@ -350,13 +352,13 @@ app.get('/api/admin/time/clients', wrap(async (req, res) => {
 app.post('/api/admin/time/clock-in', wrap(async (req, res) => {
   const b = req.body || {}, u = who(req);
   if (!u.id) throw badReq('Clocking in is for employee logins.');
-  if (!b.client_id) throw badReq('Choose the client you are working on.');
+  if (!b.client_id) throw badReq('Choose the client you are working on, or The House of Services.');
   const out = await inTx(async (db) => {
     // switching client? close the running one first
     await db.query(`update time_entries set ended_at = now() where user_id = $1 and ended_at is null`, [u.id]);
     const rate = (await db.query('select hourly_rate from app_users where id=$1', [u.id])).rows[0]?.hourly_rate || 0;
     return (await db.query(`insert into time_entries (user_id, user_name, client_id, started_at, note, rate) values ($1,$2,$3,now(),$4,$5) returning *`,
-      [u.id, u.name, b.client_id, toNull(b.note), rate])).rows[0];
+      [u.id, u.name, timeClient(b.client_id), toNull(b.note), rate])).rows[0];
   });
   res.json(out);
 }));
@@ -394,14 +396,14 @@ app.post('/api/admin/time', wrap(async (req, res) => {
   if (!u) throw badReq('Choose the employee.');
   const rate = b.rate !== undefined && b.rate !== '' ? Number(b.rate) || 0 : u.hourly_rate;
   res.json((await q(`insert into time_entries (user_id, user_name, client_id, started_at, ended_at, note, rate, edited)
-    values ($1,$2,$3,$4,$5,$6,$7,true) returning *`, [b.user_id, u.name, b.client_id, start, end, toNull(b.note), rate])).rows[0]);
+    values ($1,$2,$3,$4,$5,$6,$7,true) returning *`, [b.user_id, u.name, timeClient(b.client_id), start, end, toNull(b.note), rate])).rows[0]);
 }));
 app.put('/api/admin/time/:id', wrap(async (req, res) => {
   const b = req.body || {}, { start, end } = timeBody(b);
   const u = (await q('select name from app_users where id=$1', [b.user_id])).rows[0];
   const e = (await q(`update time_entries set user_id=$1, user_name=coalesce($2, user_name), client_id=$3, started_at=$4, ended_at=$5, note=$6,
       rate=coalesce($7, rate), edited=true where id=$8 returning *`,
-    [b.user_id, u && u.name, b.client_id, start, end, toNull(b.note), b.rate === undefined || b.rate === '' ? null : Number(b.rate) || 0, req.params.id])).rows[0];
+    [b.user_id, u && u.name, timeClient(b.client_id), start, end, toNull(b.note), b.rate === undefined || b.rate === '' ? null : Number(b.rate) || 0, req.params.id])).rows[0];
   if (!e) { const er = new Error('gone'); er.status = 404; throw er; }
   res.json(e);
 }));
@@ -905,7 +907,7 @@ create table if not exists time_entries (
   id          bigserial primary key,
   user_id     bigint references app_users(id) on delete set null,
   user_name   text not null,
-  client_id   bigint not null references clients(id) on delete cascade,
+  client_id   bigint references clients(id) on delete cascade,
   started_at  timestamptz not null,
   ended_at    timestamptz,
   note        text,
@@ -913,6 +915,7 @@ create table if not exists time_entries (
   edited      boolean not null default false,
   created_at  timestamptz not null default now()
 );
+alter table time_entries alter column client_id drop not null;   -- empty = The House of Services (internal work)
 create index if not exists idx_time_user on time_entries(user_id);
 create index if not exists idx_time_client on time_entries(client_id);
 create index if not exists idx_time_start on time_entries(started_at);
