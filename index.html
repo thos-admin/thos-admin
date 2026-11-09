@@ -1076,15 +1076,18 @@ body{margin:0;font:10.5pt/1.55 Inter,system-ui,sans-serif;color:var(--ink)}
 .bar small{color:#9fb0c8;font-weight:500}
 .page{width:210mm;margin:18px auto;background:#fff;box-shadow:0 10px 30px -12px rgba(11,19,32,.35);position:relative;overflow:hidden}
 .cover{background:var(--n);color:#fff;min-height:297mm;padding:22mm 20mm;display:flex;flex-direction:column;position:relative}
-.cover:before{content:"";position:absolute;right:-60mm;top:-60mm;width:170mm;height:170mm;border-radius:50%;background:radial-gradient(circle,rgba(255,198,41,.22),rgba(255,198,41,0) 65%)}
+.cover:before{content:"";position:absolute;right:-70mm;bottom:-50mm;width:180mm;height:180mm;border-radius:50%;background:radial-gradient(circle,rgba(255,198,41,.22),rgba(255,198,41,0) 65%)}
 .cover:after{content:"";position:absolute;left:0;bottom:0;height:8mm;width:100%;background:var(--y)}
 .logo{display:flex;align-items:center;gap:12px;font:800 13pt Montserrat,sans-serif;letter-spacing:.04em}
 .logo img{height:46px}
-.logo-img{height:22mm;width:auto;display:block;position:relative;z-index:1}
+/* the logo file has a navy box behind it: "lighten" makes that box disappear on the dark cover, white stays white */
+.logo-wrap{display:flex;justify-content:center;position:relative;z-index:1;margin-top:4mm}
+.logo-img{display:block;width:118mm;max-width:100%;height:auto;mix-blend-mode:lighten}
 .hd-l{display:flex;align-items:center;gap:3mm}
 .endmark{margin-top:12mm;padding-top:5mm;border-top:1px solid var(--line);display:flex;align-items:center;gap:4mm;color:var(--mut);font-size:8.5pt;break-inside:avoid}
-.endmark img{height:10mm;filter:brightness(0);opacity:.75}
-.hd-l img{height:9mm;width:auto;filter:brightness(0);opacity:.88}
+.endmark img{height:10mm;filter:invert(1) grayscale(1) contrast(1.8);mix-blend-mode:multiply;opacity:.8}
+/* on white pages: flip the logo to dark and let the (now light) box blend into the paper */
+.hd-l img{height:9mm;width:auto;filter:invert(1) grayscale(1) contrast(1.8);mix-blend-mode:multiply}
 .logo .mark{width:42px;height:42px}
 .kicker{margin-top:38mm;color:var(--y);font:700 10pt Montserrat,sans-serif;letter-spacing:.22em;text-transform:uppercase}
 h1{font:900 30pt/1.05 Montserrat,sans-serif;margin:6mm 0 0;letter-spacing:-.01em}
@@ -1145,7 +1148,7 @@ ol.ob{margin:0;padding-left:5mm} ol.ob li{margin-bottom:2.2mm} ol.ob li b{color:
 <div class="bar"><div>${no} · ${C}<br><small>Press the button, then choose “Save as PDF”.</small></div><button onclick="window.print()">Download PDF</button></div>
 
 <div class="page coverp"><div class="cover">
-  <img class="logo-img" src="${LOGO}" alt="The House of Services" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+  <div class="logo-wrap"><img class="logo-img" src="${LOGO}" alt="The House of Services" onerror="this.parentNode.style.display='none';this.parentNode.nextElementSibling.style.display='flex'"></div>
   <div class="logo" style="display:none"><svg class="mark" viewBox="0 0 64 64"><path d="M8 30 32 9l24 21v25H8z" fill="none" stroke="#FFC629" stroke-width="5" stroke-linejoin="round"/><rect x="26" y="34" width="12" height="12" fill="#FFC629"/></svg>THE HOUSE OF SERVICES</div>
   <div class="kicker">Agreement ${no}</div>
   <h1>Business to Business<br>Services Trade <em>Agreement</em></h1>
