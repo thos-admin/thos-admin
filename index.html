@@ -1056,6 +1056,7 @@ async function openContractDoc(k, win) {
 }
 
 function contractDocHTML(k, B) {
+  const LOGO = 'https://cdn.shopify.com/s/files/1/0613/0515/9770/files/Untitled_design_13.png?v=1723892185';
   const e = esc, C = e(k.business_name || k.client_name || ''), no = contractNo(k);
   const longDate = (iso) => { if (!iso) return '____________'; const [y, m, d] = iso.slice(0, 10).split('-'); return `${+d} ${['January','February','March','April','May','June','July','August','September','October','November','December'][m - 1]} ${y}`; };
   const svc = parseServices(k.services), T = svcTotals(svc);
@@ -1079,6 +1080,11 @@ body{margin:0;font:10.5pt/1.55 Inter,system-ui,sans-serif;color:var(--ink)}
 .cover:after{content:"";position:absolute;left:0;bottom:0;height:8mm;width:100%;background:var(--y)}
 .logo{display:flex;align-items:center;gap:12px;font:800 13pt Montserrat,sans-serif;letter-spacing:.04em}
 .logo img{height:46px}
+.logo-img{height:22mm;width:auto;display:block;position:relative;z-index:1}
+.hd-l{display:flex;align-items:center;gap:3mm}
+.endmark{margin-top:12mm;padding-top:5mm;border-top:1px solid var(--line);display:flex;align-items:center;gap:4mm;color:var(--mut);font-size:8.5pt;break-inside:avoid}
+.endmark img{height:10mm;filter:brightness(0);opacity:.75}
+.hd-l img{height:9mm;width:auto;filter:brightness(0);opacity:.88}
 .logo .mark{width:42px;height:42px}
 .kicker{margin-top:38mm;color:var(--y);font:700 10pt Montserrat,sans-serif;letter-spacing:.22em;text-transform:uppercase}
 h1{font:900 30pt/1.05 Montserrat,sans-serif;margin:6mm 0 0;letter-spacing:-.01em}
@@ -1139,7 +1145,8 @@ ol.ob{margin:0;padding-left:5mm} ol.ob li{margin-bottom:2.2mm} ol.ob li b{color:
 <div class="bar"><div>${no} · ${C}<br><small>Press the button, then choose “Save as PDF”.</small></div><button onclick="window.print()">Download PDF</button></div>
 
 <div class="page coverp"><div class="cover">
-  <div class="logo"><svg class="mark" viewBox="0 0 64 64"><path d="M8 30 32 9l24 21v25H8z" fill="none" stroke="#FFC629" stroke-width="5" stroke-linejoin="round"/><rect x="26" y="34" width="12" height="12" fill="#FFC629"/></svg>THE HOUSE OF SERVICES</div>
+  <img class="logo-img" src="${LOGO}" alt="The House of Services" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+  <div class="logo" style="display:none"><svg class="mark" viewBox="0 0 64 64"><path d="M8 30 32 9l24 21v25H8z" fill="none" stroke="#FFC629" stroke-width="5" stroke-linejoin="round"/><rect x="26" y="34" width="12" height="12" fill="#FFC629"/></svg>THE HOUSE OF SERVICES</div>
   <div class="kicker">Agreement ${no}</div>
   <h1>Business to Business<br>Services Trade <em>Agreement</em></h1>
   <div class="parties">
@@ -1158,7 +1165,7 @@ ol.ob{margin:0;padding-left:5mm} ol.ob li{margin-bottom:2.2mm} ol.ob li b{color:
 </div></div>
 
 <div class="page flow"><div class="inner">
-  <div class="hd"><span>Services Trade Agreement</span><span>${no}</span></div>
+  <div class="hd"><span class="hd-l"><img src="${LOGO}" alt="The House of Services" onerror="this.remove()">Services Trade Agreement</span><span>${no}</span></div>
   <h2>The parties</h2>
   <p>This Service Trade Agreement is made pursuant to the terms of the agreement between:</p>
   <div class="box"><div class="kv">
@@ -1221,6 +1228,7 @@ ol.ob{margin:0;padding-left:5mm} ol.ob li{margin-bottom:2.2mm} ol.ob li b{color:
       <div class="sl sig"><label>Signature</label><div></div></div>
       <div class="sl"><label>Date</label><div></div></div></div></div>
   </div></div>
+  <div class="endmark"><img src="${LOGO}" alt="" onerror="this.remove()"><span>${e(B.business_name)} · Reg No ${e(B.reg_no)} · ${e(B.email)}</span></div>
 </div></div>
 </body></html>`;
 }
